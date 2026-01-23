@@ -1,0 +1,42 @@
+import { Router } from 'express';
+import { validateAdminMiddleware } from '../../../lib/authlib.mjs';
+import ProgressReportsRouter from './progressReports/index.js';
+import CategoriesRouter from './categories/index.js';
+import AssignmentsRouter from './assignments/index.js';
+import StatsRouter from './stats/index.js';
+import DistributionRouter from './distribution/index.js';
+import StudentScoresRouter from './studentScores/index.js';
+import AIQueryRouter from './ai-query/index.js';
+import SyncRouter from './sync/index.js';
+import RateLimit from 'express-rate-limit';
+
+const router = Router({ mergeParams: true });
+
+// set up rate limiter: maximum of 10000 requests per 15 minutes
+const limiter = RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10000, // max 10000 requests per windowMs
+});
+
+// apply rate limiter to all requests
+router.use(limiter);
+
+router.use(validateAdminMiddleware);
+
+// Mount sub-routers
+router.use('/progressreports', ProgressReportsRouter);
+router.use('/categories', CategoriesRouter); // Legacy Redis endpoint
+router.use('/assignments', AssignmentsRouter); // New database endpoint
+router.use('/stats', StatsRouter);
+router.use('/distribution', DistributionRouter);
+router.use('/studentScores', StudentScoresRouter);
+router.use('/ai-query', AIQueryRouter); // AI Agent query endpoint
+router.use('/sync', SyncRouter); // GradeSync integration
+
+// Default admin route
+router.get('/', (_, res) => {
+    res.status(200);
+    res.json({ message: 'Admin API endpoints available' });
+});
+
+export default router;

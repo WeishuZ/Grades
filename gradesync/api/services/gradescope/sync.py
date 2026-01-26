@@ -111,7 +111,7 @@ class GradescopeSync:
                         if isinstance(scores_csv, bytes):
                             scores_csv = scores_csv.decode('utf-8')
                         
-                        # print(f"[{_ts()}] Downloaded {len(scores_csv)} bytes for {assignment_name} ({_dl_elapsed:.2f}s)", flush=True)
+                        logger.info(f"[INFO] [{_ts()}] `save_to_db` is {save_to_db} for {assignment_name}")
                         
                         # Parse CSV and save to database if requested
                         if save_to_db:

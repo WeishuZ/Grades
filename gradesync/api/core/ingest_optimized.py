@@ -82,27 +82,35 @@ def batch_upsert_submissions(
         sub['assignment_id'] = assignment_db_id
     
     # Use PostgreSQL INSERT ... ON CONFLICT DO UPDATE
-    stmt = insert(Submission).values(submissions_data)
-    stmt = stmt.on_conflict_do_update(
-        constraint='uq_assignment_student',
-        set_={
-            'total_score': stmt.excluded.total_score,
-            'max_points': stmt.excluded.max_points,
-            'status': stmt.excluded.status,
-            'submission_id': stmt.excluded.submission_id,
-            'submission_time': stmt.excluded.submission_time,
-            'lateness': stmt.excluded.lateness,
-            'view_count': stmt.excluded.view_count,
-            'submission_count': stmt.excluded.submission_count,
-            'scores_by_question': stmt.excluded.scores_by_question,
-        }
-    )
-    
-    session.execute(stmt)
-    session.commit()
-    
-    logger.info(f"Batch upserted {len(submissions_data)} submissions")
-    return len(submissions_data)
+    try:
+        stmt = insert(Submission).values(submissions_data)
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_assignment_student',
+            set_={
+                'total_score': stmt.excluded.total_score,
+                'max_points': stmt.excluded.max_points,
+                'status': stmt.excluded.status,
+                'submission_id': stmt.excluded.submission_id,
+                'submission_time': stmt.excluded.submission_time,
+                'lateness': stmt.excluded.lateness,
+                'view_count': stmt.excluded.view_count,
+                'submission_count': stmt.excluded.submission_count,
+                'scores_by_question': stmt.excluded.scores_by_question,
+            }
+        )
+        
+        logger.info(f"[INFO] Executing batch upsert for {len(submissions_data)} submissions")
+        result = session.execute(stmt)
+        logger.info(f"[INFO] Batch execute completed, committing...")
+        session.commit()
+        logger.info(f"[INFO] Batch commit completed")
+        
+        logger.info(f"Batch upserted {len(submissions_data)} submissions")
+        return len(submissions_data)
+    except Exception as e:
+        logger.error(f"[INFO] Error in batch_upsert_submissions: {e}")
+        session.rollback()
+        raise
 
 
 def batch_upsert_students(
@@ -146,6 +154,7 @@ def write_assignment_scores_optimized(
     csv_content: str,
     course_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
+    logger.info(f"[INFO] [{_ts()}] === Entered write_assignment_scores_optimized for {assignment_name} ===")
     """
     Optimized version of write_assignment_scores_to_db with batch operations.
     
@@ -163,8 +172,9 @@ def write_assignment_scores_optimized(
     _fn_start = _time.time()
     # print(f"[{_ts()}] DB: Starting write_assignment_scores_optimized for {assignment_name}")
     
+    logger.info(f"[INFO] [{_ts()}] Attempting to create DB session for {assignment_name}...")
     session = SessionLocal()
-    # print(f"[{_ts()}] DB: Session created ({_time.time() - _fn_start:.2f}s)")
+    logger.info(f"[INFO] [{_ts()}] DB session created successfully for {assignment_name} ({_time.time() - _fn_start:.2f}s)")
     
     try:
         # Get or create course
@@ -226,9 +236,11 @@ def write_assignment_scores_optimized(
                 'max_points': float(row.get('Max Points', 0) or 0),
                 'status': row.get('Status', ''),
                 'submission_id': row.get('Submission ID', ''),
+                'submission_time': None,  # Initialize to None, will be set if parsing succeeds
                 'lateness': row.get('Lateness (H:M:S)', ''),
                 'view_count': int(row.get('View Count', 0) or 0),
                 'submission_count': int(row.get('Submission Count', 0) or 0),
+                'scores_by_question': {},  # Initialize to empty dict
             }
             
             # Parse submission time, expecting "YYYY-MM-DD HH:MM:SS ZZZZ" format
@@ -239,15 +251,18 @@ def write_assignment_scores_optimized(
                     parsed_time = datetime.strptime(sub_time_str, "%Y-%m-%d %H:%M:%S %z")
                     submission['submission_time'] = parsed_time
                 except ValueError:
-                    # If parsing fails, skip this timestamp but still process the submission
-                    pass
+                    # If parsing fails, keep submission_time as None
+                    logger.warning(f"Failed to parse submission time '{sub_time_str}' for {email}")
             
             submissions_data.append({**submission, 'email': email})
         
         # Batch upsert students
+        logger.info(f"[INFO] Starting batch_upsert_students for {assignment_name}")
         email_to_id = batch_upsert_students(session, students_data)
+        logger.info(f"[INFO] batch_upsert_students completed, got {len(email_to_id)} student IDs")
         
         # Add student_id to submissions and remove email
+        logger.info(f"[INFO] Preparing final submissions for {assignment_name}")
         final_submissions = []
         for sub in submissions_data:
             email = sub.pop('email')
@@ -255,17 +270,22 @@ def write_assignment_scores_optimized(
             if student_id:
                 sub['student_id'] = student_id
                 final_submissions.append(sub)
+        logger.info(f"[INFO] Prepared {len(final_submissions)} final submissions")
         
         # Batch upsert submissions
+        logger.info(f"[INFO] Starting batch_upsert_submissions for {assignment_name}")
         num_submissions = batch_upsert_submissions(
             session,
             assignment.id,
             final_submissions
         )
+        logger.info(f"[INFO] batch_upsert_submissions completed, processed {num_submissions} submissions")
         
         # Update assignment sync timestamp
+        logger.info(f"[INFO] Updating last_synced_at for {assignment_name}")
         assignment.last_synced_at = datetime.now(timezone.utc)
         session.commit()
+        logger.info(f"[INFO] Session committed for {assignment_name}")
         
         logger.info(f"Successfully synced {assignment_name}: {num_submissions} submissions")
         

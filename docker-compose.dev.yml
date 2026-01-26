@@ -89,6 +89,8 @@ services:
     build: ./gradesync
     env_file:
       - .env
+    volumes:
+      - ./gradesync:/app
     environment:
       - DATABASE_URL=${GRADESYNC_DATABASE_URL}
       - SERVICE_ACCOUNT_CREDENTIALS=${GRADESYNC_SERVICE_ACCOUNT_CREDENTIALS}
@@ -97,7 +99,7 @@ services:
       - db
     ports:
       - "8001:8000"
-    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
 
 networks:

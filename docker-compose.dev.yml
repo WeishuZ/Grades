@@ -45,7 +45,9 @@ services:
       - "--credentials-file=/secrets/key.json"
       - "${INSTANCE_CONNECTION_NAME}"
     volumes:
-      - ./secrets/google-credentials.json:/secrets/key.json:ro
+      - ./secrets/key.json:/secrets/key.json:ro
+    env_file:
+      - .env
     networks:
       - frontend
       - db # 确保 proxy 也在 db 网络中
@@ -117,7 +119,11 @@ services:
       - ./gradesync:/app
     environment:
       - POSTGRES_HOST=cloud-sql-proxy
-      - DATABASE_URL=${GRADESYNC_DATABASE_URL}
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@cloud-sql-proxy:5432/${POSTGRES_DB}
       - SERVICE_ACCOUNT_CREDENTIALS=${GRADESYNC_SERVICE_ACCOUNT_CREDENTIALS}
     networks:
       - frontend

@@ -36,8 +36,11 @@ export function getPool() {
                 password: POSTGRES_PASSWORD,
                 max: 20, // Max number of clients in the pool
                 idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-                connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
+                connectionTimeoutMillis: 10000, // Increased to 10 seconds for Cloud SQL
                 keepAlive: true, // Enable keep-alive to avoid timeouts from the proxy
+                ssl: POSTGRES_HOST.includes('.') && !POSTGRES_HOST.includes('localhost') && POSTGRES_HOST !== 'cloud-sql-proxy'
+                    ? { rejectUnauthorized: false } // Enable SSL for external IPs (Cloud SQL)
+                    : false,
             };
         } else {
             const databaseUrl = GRADESYNC_DATABASE_URL || DATABASE_URL;

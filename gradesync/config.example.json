@@ -1,0 +1,50 @@
+{
+  "courses": [
+    {
+      "id": "course_id",
+      "name": "Course Name",
+      "department": "DEPT",
+      "course_number": "101",
+      "semester": "Fall",
+      "year": 2025,
+      "instructor": "Instructor Name",
+      "gradescope": {
+        "enabled": true,
+        "course_id": "123456",
+        "sync_interval_hours": 24
+      },
+      "prairielearn": {
+        "enabled": false,
+        "course_id": "123456"
+      },
+      "iclicker": {
+        "enabled": false,
+        "course_names": [
+          "[COURSE | Term] Lecture",
+          "[COURSE | Term] Lab"
+        ]
+      },
+      "spreadsheet": {
+        "id": "your_spreadsheet_id",
+        "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+      },
+      "database": {
+        "enabled": true,
+        "use_as_primary": true
+      },
+      "assignment_categories": [
+        {
+          "name": "Attendance",
+          "patterns": ["Lecture Quiz", "Discussion"]
+        }
+      ]
+    }
+  ],
+  "global_settings": {
+    "default_scopes": ["https://www.googleapis.com/auth/spreadsheets"],
+    "csv_output_dir": "data/exports",
+    "log_level": "INFO",
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5
+  }
+}

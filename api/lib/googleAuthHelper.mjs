@@ -9,23 +9,37 @@ import AuthorizationError from './errors/http/AuthorizationError.js';
  */
 export async function getEmailFromAuth(token) {
     const googleOauthAudience = config.get('googleconfig.oauth.clientid');
-    try {
-        let oauthClient = new OAuth2Client(googleOauthAudience);
-        const ticket = await oauthClient.verifyIdToken({
-            idToken: token.split(' ')[1],
-            audience: googleOauthAudience,
-        });
-        const payload = ticket.getPayload();
-        if (payload['hd'] !== 'berkeley.edu') {
-            throw new AuthorizationError('domain mismatch');
+    
+    // Retry logic for handling Google key rotation
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            let oauthClient = new OAuth2Client(googleOauthAudience);
+            const ticket = await oauthClient.verifyIdToken({
+                idToken: token.split(' ')[1],
+                audience: googleOauthAudience,
+            });
+            const payload = ticket.getPayload();
+            if (payload['hd'] !== 'berkeley.edu') {
+                throw new AuthorizationError('domain mismatch');
+            }
+            return payload['email'];
+        } catch (err) {
+            lastError = err;
+            // Retry on certificate errors (Google key rotation)
+            if (err.message && err.message.includes('No pem found') && attempt === 0) {
+                console.warn('Google certificate not found, retrying with fresh client...');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+            }
+            break;
         }
-        return payload['email'];
-    } catch (err) {
-        console.error('Error during Google authorization:', err);
-        throw new AuthorizationError(
-            'Could not authenticate authorization token.',
-        );
     }
+    
+    console.error('Error during Google authorization:', lastError);
+    throw new AuthorizationError(
+        'Could not authenticate authorization token.',
+    );
 }
 
 /**

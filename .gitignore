@@ -16,5 +16,5 @@ website/build/
 **/.DS_Store
 .vscode/
 
-*.md
+
 secrets/

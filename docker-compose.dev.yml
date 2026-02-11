@@ -28,6 +28,7 @@ services:
       - .env
     volumes:
       - ./website/server/build:/website/build
+      - ./website/server/build:/app/build
     environment:
       - REACT_APP_PROXY_SERVER=${REACT_APP_PROXY_SERVER}
       - PORT=${REACT_APP_PORT}

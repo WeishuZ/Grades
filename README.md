@@ -4,19 +4,7 @@ GradeView is a multi-service web app for viewing grades, syncing data, and gener
 
 ## High-level architecture
 
-```mermaid
-graph TD
-  User[Browser] --> RP[Reverse Proxy]
-  RP --> Web[Web UI]
-  RP --> API[API Server]
-  RP --> PR[Progress Report]
-  Web --> API
-  API --> Redis[Redis]
-  API --> DB[PostgreSQL]
-  GS[GradeSync] --> DB
-  DBCron[DB Cron] --> Redis
-  CSP[Cloud SQL Proxy] --> DB
-```
+![GradeView Logic Flow](./docs/Project_structure.png)
 
 ## Project structure
 

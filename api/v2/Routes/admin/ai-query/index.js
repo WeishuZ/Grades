@@ -1,12 +1,10 @@
 import { Router } from 'express';
-import pkg from 'pg';
-const { Pool } = pkg;
+import { getPool } from '../../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
-const pool = new Pool({
-    connectionString: process.env.GRADESYNC_DATABASE_URL || process.env.DATABASE_URL
-});
+// Use shared pool
+const getDbPool = () => getPool();
 
 /**
  * Database Schema Information
@@ -126,7 +124,7 @@ async function processWithAI(userQuery) {
     validateSQL(sqlQuery);
 
     // 3. Execute SQL
-    const queryResult = await pool.query(sqlQuery);
+    const queryResult = await getDbPool().query(sqlQuery);
 
     // 4. Explain results using AI
     const explanation = await explainResultsWithAI(userQuery, queryResult.rows, apiKey);
@@ -299,7 +297,7 @@ async function processWithRules(userQuery) {
  * Student analysis (fallback mode)
  */
 async function getStudentAnalysis() {
-    const result = await pool.query(`
+    const result = await getDbPool().query(`
         WITH student_stats AS (
             SELECT 
                 s.id,
@@ -338,7 +336,7 @@ async function getStudentAnalysis() {
  * Assignment analysis (fallback mode)
  */
 async function getAssignmentAnalysis() {
-    const result = await pool.query(`
+    const result = await getDbPool().query(`
         SELECT 
             a.title,
             a.category,
@@ -367,7 +365,7 @@ async function getAssignmentAnalysis() {
  * Statistical analysis (fallback mode)
  */
 async function getStatistics() {
-    const result = await pool.query(`
+    const result = await getDbPool().query(`
         WITH score_stats AS (
             SELECT 
                 (sub.total_score / NULLIF(sub.max_points, 0) * 100) as score_pct
@@ -399,7 +397,7 @@ async function getStatistics() {
  * General overview (fallback mode)
  */
 async function getGeneralOverview() {
-    const result = await pool.query(`
+    const result = await getDbPool().query(`
         SELECT 
             COUNT(DISTINCT s.id) as total_students,
             COUNT(DISTINCT a.id) as total_assignments,

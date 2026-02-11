@@ -2,12 +2,10 @@
  * Database-backed configuration service with multi-tenant support
  * Replaces JSON file-based configuration with PostgreSQL storage
  */
-import pkg from 'pg';
-const { Pool } = pkg;
+import { getPool } from '../../../lib/dbHelper.mjs';
 
-const pool = new Pool({
-    connectionString: process.env.GRADESYNC_DATABASE_URL || process.env.DATABASE_URL
-});
+// Use shared pool
+const getDbPool = () => getPool();
 
 /**
  * Permission levels:
@@ -31,7 +29,7 @@ class ConfigService {
             WHERE u.id = $2 AND u.is_active = true
         `;
         
-        const result = await pool.query(query, [courseId, userId]);
+        const result = await getDbPool().query(query, [courseId, userId]);
         
         if (result.rows.length === 0) {
             return { hasAccess: false, reason: 'User not found or inactive' };
@@ -72,7 +70,7 @@ class ConfigService {
             ORDER BY c.year DESC, c.semester, c.department, c.course_number
         `;
         
-        const result = await pool.query(query, [userId]);
+        const result = await getDbPool().query(query, [userId]);
         return result.rows;
     }
     
@@ -105,7 +103,7 @@ class ConfigService {
             GROUP BY c.id, cc.id
         `;
         
-        const result = await pool.query(query, [courseId]);
+        const result = await getDbPool().query(query, [courseId]);
         
         if (result.rows.length === 0) {
             throw new Error('Course not found');
@@ -233,7 +231,7 @@ class ConfigService {
      */
     async getGradeViewConfig(userId) {
         // Check if user is admin or superadmin
-        const userResult = await pool.query(
+        const userResult = await getDbPool().query(
             'SELECT role FROM users WHERE id = $1',
             [userId]
         );
@@ -243,7 +241,7 @@ class ConfigService {
             throw new Error('Admin access required');
         }
         
-        const result = await pool.query('SELECT key, value, value_type FROM gradeview_config');
+        const result = await getDbPool().query('SELECT key, value, value_type FROM gradeview_config');
         
         const config = {
             redis: {},
@@ -269,7 +267,7 @@ class ConfigService {
         });
         
         // Get admin list
-        const admins = await pool.query(
+        const admins = await getDbPool().query(
             "SELECT email FROM users WHERE role IN ('admin', 'superadmin') AND is_active = true"
         );
         config.admins = admins.rows.map(r => r.email);
@@ -282,7 +280,7 @@ class ConfigService {
      */
     async updateGradeViewConfig(userId, config) {
         // Check admin permission
-        const userResult = await pool.query(
+        const userResult = await getDbPool().query(
             'SELECT role FROM users WHERE id = $1',
             [userId]
         );
@@ -292,7 +290,7 @@ class ConfigService {
             throw new Error('Admin access required');
         }
         
-        const client = await pool.connect();
+        const client = await getDbPool().connect();
         
         try {
             await client.query('BEGIN');
@@ -363,7 +361,7 @@ class ConfigService {
      * Get system configuration (GradeSync global settings)
      */
     async getSystemConfig(userId) {
-        const userResult = await pool.query(
+        const userResult = await getDbPool().query(
             'SELECT role FROM users WHERE id = $1',
             [userId]
         );
@@ -373,7 +371,7 @@ class ConfigService {
             throw new Error('Admin access required');
         }
         
-        const result = await pool.query('SELECT key, value, value_type FROM system_config');
+        const result = await getDbPool().query('SELECT key, value, value_type FROM system_config');
         
         const config = { global_settings: {} };
         result.rows.forEach(row => {

@@ -13,7 +13,7 @@ let pool = null;
  * Gets or creates a PostgreSQL connection pool.
  * @returns {Pool} PostgreSQL pool instance
  */
-function getPool() {
+export function getPool() {
     if (!pool) {
         const {
             POSTGRES_HOST,
@@ -34,6 +34,10 @@ function getPool() {
                 database: POSTGRES_DB,
                 user: POSTGRES_USER,
                 password: POSTGRES_PASSWORD,
+                max: 20, // Max number of clients in the pool
+                idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+                connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
+                keepAlive: true, // Enable keep-alive to avoid timeouts from the proxy
             };
         } else {
             const databaseUrl = GRADESYNC_DATABASE_URL || DATABASE_URL;
@@ -42,6 +46,10 @@ function getPool() {
             }
             poolConfig = {
                 connectionString: databaseUrl,
+                max: 20,
+                idleTimeoutMillis: 30000,
+                connectionTimeoutMillis: 5000,
+                keepAlive: true,
             };
         }
         

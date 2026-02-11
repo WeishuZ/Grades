@@ -7,7 +7,7 @@ import redis
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 
-PORT = int(os.getenv("SERVER_PORT"))
+PORT = int(os.getenv("SERVER_PORT", "6379"))
 SCOPES = json.loads(os.getenv("SPREADSHEET_SCOPES"))
 HOST = os.getenv("SERVER_HOST")
 DB = int(os.getenv("BINS_DBINDEX"))

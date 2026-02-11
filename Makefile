@@ -45,7 +45,7 @@ dev-local:
 	fi; \
 	'
 	@echo "1. Starting Redis and dbcron..."
-	@docker-compose up -d redis dbcron
+	@docker compose -f docker-compose.dev.yml up -d redis dbcron cloud-sql-proxy
 	@echo "2. Waiting for data to be loaded into Redis..."
 	@sleep 5
 	@echo "3. Starting API server..."

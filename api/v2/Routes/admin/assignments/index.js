@@ -1,12 +1,7 @@
 import { Router } from 'express';
-import pkg from 'pg';
-const { Pool } = pkg;
+import { getPool } from '../../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
-
-const pool = new Pool({
-    connectionString: process.env.GRADESYNC_DATABASE_URL || process.env.DATABASE_URL
-});
 
 /**
  * GET /admin/assignments
@@ -20,6 +15,7 @@ const pool = new Pool({
  */
 router.get('/', async (req, res) => {
     try {
+        const pool = getPool();
         const query = `
             SELECT 
                 COALESCE(a.category, 'Uncategorized') as category,

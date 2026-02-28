@@ -45,7 +45,14 @@ jobs:
               git fetch --all --prune
               git checkout main
               git reset --hard ${{ github.sha }}
-              sudo docker-compose -f docker-compose.yml down --remove-orphans
+              # 停止并移除所有容器
+              sudo docker-compose -f docker-compose.yml down --remove-orphans || true
+              # 强制移除 frontend 网络（解决 active endpoints 问题）
+              sudo docker network rm frontend || true
+              # 清理无用容器
+              sudo docker container prune -f
+              # 重新启动服务
               sudo docker-compose -f docker-compose.yml up -d --build
+              # 清理无用镜像
               sudo docker image prune -f
             "

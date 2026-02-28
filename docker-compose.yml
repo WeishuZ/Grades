@@ -19,7 +19,9 @@ services:
   web:
     container_name: gradeview-web
     image: ${CI_REGISTRY_IMAGE:-gradeview}/web:${WEB_VERSION:-development}
-    build: ./website/server
+    build:
+      context: ./website
+      dockerfile: ./server/Dockerfile
     env_file:
       - .env
     environment:

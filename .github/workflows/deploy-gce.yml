@@ -45,16 +45,10 @@ jobs:
               git fetch --all --prune
               git checkout main
               git reset --hard ${{ github.sha }}
-              # Stop compose stack (do not fail deployment if cleanup hits stale resources)
-              sudo docker-compose -f docker-compose.yml down --remove-orphans --volumes || true
-              # Force-remove known containers to avoid name conflicts on re-create
-              sudo docker rm -f gradeview-api gradeview-web gradeview-gradesync gradeview-reverse-proxy grades_redis_1 2>/dev/null || true
-              # Remove stale networks if still present
-              sudo docker network rm frontend db 2>/dev/null || true
-              # Clean up dangling resources
-              sudo docker container prune -f
+              # Minimal, idempotent cleanup
+              sudo docker-compose -f docker-compose.yml down --remove-orphans || true
+              sudo docker rm -f gradeview-api gradeview-web gradeview-gradesync gradeview-reverse-proxy 2>/dev/null || true
+
               # Recreate services from latest commit
               sudo docker-compose -f docker-compose.yml up -d --build --force-recreate --remove-orphans
-              # Clean up dangling images
-              sudo docker image prune -f
             "

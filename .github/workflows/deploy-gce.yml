@@ -10,7 +10,7 @@ jobs:
   deploy:
     name: Deploy on GCE VM
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && secrets.GCP_SA_KEY != '' && secrets.GCP_PROJECT_ID != '' && secrets.GCP_ZONE != '' && secrets.GCE_INSTANCE != ''
 
     permissions:
       contents: read

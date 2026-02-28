@@ -100,25 +100,25 @@ export default function Buckets({ embedded = false }) {
                 }
                 
                 // Process grading breakdown from backend config
+                const fallbackRows = [
+                    { assignment: 'Quest', points: 25 },
+                    { assignment: 'Midterm', points: 50 },
+                    { assignment: 'Postterm', points: 75 },
+                    { assignment: 'Project 1: Wordle™-lite', points: 15 },
+                    { assignment: 'Project 2: Spelling-Bee', points: 25 },
+                    { assignment: 'Project 3: 2048', points: 35 },
+                    { assignment: 'Project 4: Explore', points: 20 },
+                    { assignment: 'Final Project', points: 60 },
+                    { assignment: 'Labs', points: 80 },
+                    { assignment: 'Attendance / Participation', points: 15 }
+                ];
+
                 const assignmentPoints = res.data.assignment_points || {};
                 if (Object.keys(assignmentPoints).length > 0) {
                     const breakdownRows = Object.entries(assignmentPoints)
                         .map(([assignment, points]) => ({ assignment, points }));
                     setGradingRows(breakdownRows);
                 } else {
-                    // Fallback to hardcoded values if no data configured
-                    const fallbackRows = [
-                        { assignment: 'Quest', points: 25 },
-                        { assignment: 'Midterm', points: 50 },
-                        { assignment: 'Postterm', points: 75 },
-                        { assignment: 'Project 1: Wordle™-lite', points: 15 },
-                        { assignment: 'Project 2: Spelling-Bee', points: 25 },
-                        { assignment: 'Project 3: 2048', points: 35 },
-                        { assignment: 'Project 4: Explore', points: 20 },
-                        { assignment: 'Final Project', points: 60 },
-                        { assignment: 'Labs', points: 80 },
-                        { assignment: 'Attendance / Participation', points: 15 }
-                    ];
                     setGradingRows(fallbackRows);
                 }
             }
@@ -140,7 +140,18 @@ export default function Buckets({ embedded = false }) {
                     { grade: 'F', range: '0-240' }
                 ];
                 setBins(fallbackBins);
-                setGradingRows([]);
+                setGradingRows([
+                    { assignment: 'Quest', points: 25 },
+                    { assignment: 'Midterm', points: 50 },
+                    { assignment: 'Postterm', points: 75 },
+                    { assignment: 'Project 1: Wordle™-lite', points: 15 },
+                    { assignment: 'Project 2: Spelling-Bee', points: 25 },
+                    { assignment: 'Project 3: 2048', points: 35 },
+                    { assignment: 'Project 4: Explore', points: 20 },
+                    { assignment: 'Final Project', points: 60 },
+                    { assignment: 'Labs', points: 80 },
+                    { assignment: 'Attendance / Participation', points: 15 }
+                ]);
             }
         }).finally(() => {
             setLoadCount(i => i - 1);

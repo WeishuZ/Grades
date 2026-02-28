@@ -177,14 +177,23 @@ export default function StudentProfile() {
     // Fetch both student grades and class category averages
     Promise.all([
       apiv2.get(`/students/${encodeURIComponent(fetchEmail)}/grades?format=db${queryCourseId ? `&course_id=${encodeURIComponent(queryCourseId)}` : ''}`),
-      apiv2.get(`/students/category-stats${courseQuery}`)
+      apiv2.get(`/students/category-stats${courseQuery}`),
+      apiv2.get(`/bins${courseQuery}`)
     ])
-      .then(([gradesRes, statsRes]) => {
+      .then(([gradesRes, statsRes, binsRes]) => {
         const data = gradesRes.data;
         const classAverages = statsRes.data;
+        const gradingConfig = {
+          assignmentPoints: binsRes?.data?.assignment_points || {},
+          totalCoursePoints:
+            Number(binsRes?.data?.overall_cap_points)
+            || Number(binsRes?.data?.total_points_cap)
+            || Number(binsRes?.data?.total_course_points)
+            || 0,
+        };
         
         console.log('[DEBUG] Class averages:', classAverages);
-        setStudentData(processStudentData(data, fetchEmail, studentName, undefined, classAverages));
+        setStudentData(processStudentData(data, fetchEmail, studentName, undefined, classAverages, gradingConfig));
         setLoading(false);
       })
       .catch(err => {

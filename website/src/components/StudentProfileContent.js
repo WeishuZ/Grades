@@ -172,7 +172,7 @@ export default function StudentProfileContent({ studentData }) {
                 {Math.round(studentData.totalScore)}
               </Typography>
               <Typography variant="body2" sx={{ color: '#9ca3af' }}>
-                / {Math.round(studentData.totalMaxPoints)}
+                / {Math.round(studentData.totalCapPoints ?? studentData.totalMaxPoints)}
               </Typography>
             </Box>
           </Grid>
@@ -214,7 +214,7 @@ export default function StudentProfileContent({ studentData }) {
               <TableRow sx={{ backgroundColor: '#f9fafb' }}>
                 <TableCell><strong>Category</strong></TableCell>
                 <TableCell align="center"><strong>Score</strong></TableCell>
-                <TableCell align="center"><strong>Max</strong></TableCell>
+                <TableCell align="center"><strong>Cap</strong></TableCell>
                 <TableCell align="center"><strong>%</strong></TableCell>
                 <TableCell align="center"><strong>Count</strong></TableCell>
                 <TableCell align="center"><strong>Avg</strong></TableCell>
@@ -226,7 +226,7 @@ export default function StudentProfileContent({ studentData }) {
                   <TableRow key={category} hover>
                     <TableCell><strong>{category}</strong></TableCell>
                     <TableCell align="center">{Math.round(data.total)}</TableCell>
-                    <TableCell align="center">{Math.round(data.maxPoints)}</TableCell>
+                    <TableCell align="center">{Math.round(data.capPoints ?? data.maxPoints)}</TableCell>
                     <TableCell align="center">{renderProgressBattery(data.percentage)}</TableCell>
                     <TableCell align="center">{data.count}</TableCell>
                     <TableCell align="center">{data.average.toFixed(2)}</TableCell>
@@ -425,7 +425,7 @@ export default function StudentProfileContent({ studentData }) {
                         label: function(context) {
                           const category = context.label;
                           const data = studentData.categoriesData[category];
-                          return `${data.percentage.toFixed(2)}% (${Math.round(data.total)}/${Math.round(data.maxPoints)})`;
+                          return `${data.percentage.toFixed(2)}% (${Math.round(data.total)}/${Math.round(data.capPoints ?? data.maxPoints)})`;
                         }
                       }
                     }

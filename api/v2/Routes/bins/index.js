@@ -8,6 +8,28 @@ const router = Router({ mergeParams: true });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GRADE_SYNC_CONFIG_PATH = path.resolve(__dirname, '../../../../gradesync/config.json');
 
+const DEFAULT_ASSIGNMENT_POINTS = {
+    'Quest': 25,
+    'Midterm': 50,
+    'Postterm': 75,
+    'Project 1: Wordle™-lite': 15,
+    'Project 2: Spelling-Bee': 25,
+    'Project 3: 2048': 35,
+    'Project 4: Explore': 20,
+    'Final Project': 60,
+    'Labs': 80,
+    'Attendance / Participation': 15,
+};
+
+const DEFAULT_COMPONENT_PERCENTAGES = [
+    { component: 'Attendance / Participation', percentage: 3.75 },
+    { component: 'Labs', percentage: 20 },
+    { component: 'Projects', percentage: 38.75 },
+    { component: 'Quest', percentage: 6.25 },
+    { component: 'Midterm', percentage: 12.5 },
+    { component: 'Postterm', percentage: 18.75 },
+];
+
 const DEFAULT_GRADE_BINS = [
     { grade: 'A+', range: '390-400' },
     { grade: 'A', range: '370-390' },
@@ -23,9 +45,14 @@ const DEFAULT_GRADE_BINS = [
 ];
 
 async function loadGradeSyncConfig() {
-    const raw = await fs.readFile(GRADE_SYNC_CONFIG_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return parsed?.courses || [];
+    try {
+        const raw = await fs.readFile(GRADE_SYNC_CONFIG_PATH, 'utf-8');
+        const parsed = JSON.parse(raw);
+        return parsed?.courses || [];
+    } catch (err) {
+        console.warn('Unable to read GradeSync config for bins route, using defaults:', err?.message || err);
+        return [];
+    }
 }
 
 function resolveCourseById(courses, requestedCourseId) {
@@ -111,6 +138,18 @@ function normalizeAssignmentPoints(rawBreakdown) {
     }, {});
 }
 
+function getMaxBinPoints(bins = []) {
+    const maxes = bins
+        .map((bin) => {
+            const range = String(bin?.range || '');
+            const match = range.match(/(\d+)\s*$/);
+            return match ? Number(match[1]) : NaN;
+        })
+        .filter((value) => Number.isFinite(value));
+
+    return maxes.length > 0 ? Math.max(...maxes) : 0;
+}
+
 router.get('/', async (req, res) => {
     const { course_id: requestedCourseId } = req.query;
 
@@ -119,15 +158,28 @@ router.get('/', async (req, res) => {
         const course = resolveCourseById(courses, requestedCourseId);
 
         const bins = normalizeBins(course?.buckets?.grade_bins);
-        const assignmentPoints = normalizeAssignmentPoints(course?.buckets?.grading_breakdown);
+        const assignmentPointsFromConfig = normalizeAssignmentPoints(course?.buckets?.grading_breakdown);
+        const assignmentPoints = Object.keys(assignmentPointsFromConfig).length > 0
+            ? assignmentPointsFromConfig
+            : DEFAULT_ASSIGNMENT_POINTS;
         const totalCoursePoints = Object.values(assignmentPoints).reduce((sum, val) => sum + (Number(val) || 0), 0);
+        const configuredCapPoints = Number(course?.buckets?.total_points_cap) || totalCoursePoints;
+        const maxBinPoints = getMaxBinPoints(bins);
+        const overallCapPoints = maxBinPoints || configuredCapPoints || totalCoursePoints;
         
         const response = {
             bins,
             assignment_points: assignmentPoints,
             total_course_points: totalCoursePoints,
+            total_points_cap: configuredCapPoints,
+            overall_cap_points: overallCapPoints,
+            component_percentages: Array.isArray(course?.buckets?.component_percentages)
+                ? course.buckets.component_percentages
+                : DEFAULT_COMPONENT_PERCENTAGES,
+            rounding_policy: course?.buckets?.rounding_policy
+                || 'Total points are rounded to nearest integer before letter-grade bin lookup (0.5 rounds up). No curve/bin shifting.',
             course_id: course?.id || requestedCourseId || null,
-            source: 'gradesync_config'
+            source: course ? 'gradesync_config' : 'default_policy'
         };
 
         return res.status(200).json(response);
@@ -136,7 +188,17 @@ router.get('/', async (req, res) => {
             message: err?.message,
             courseId: requestedCourseId || null
         });
-        return res.status(500).json({ message: 'Internal Server Error' });
+        return res.status(200).json({
+            bins: DEFAULT_GRADE_BINS,
+            assignment_points: DEFAULT_ASSIGNMENT_POINTS,
+            total_course_points: 400,
+            total_points_cap: 400,
+            overall_cap_points: 400,
+            component_percentages: DEFAULT_COMPONENT_PERCENTAGES,
+            rounding_policy: 'Total points are rounded to nearest integer before letter-grade bin lookup (0.5 rounds up). No curve/bin shifting.',
+            course_id: requestedCourseId || null,
+            source: 'default_policy_fallback'
+        });
     }
 });
 

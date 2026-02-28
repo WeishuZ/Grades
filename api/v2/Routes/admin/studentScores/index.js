@@ -11,10 +11,11 @@ const router = Router({ mergeParams: true });
  */
 router.get('/', async (req, res) => {
     const startTime = Date.now();
+    const { course_id: courseId } = req.query;
     
     try {
         // NEW: Single database query instead of 200+ Redis queries
-        const students = await getAllStudentScores();
+        const students = await getAllStudentScores(courseId || null);
         
         const queryTime = Date.now() - startTime;
         console.log(`[PERF] Fetched all student scores from DB in ${queryTime}ms (${students.length} students)`);

@@ -69,8 +69,10 @@ def get_summary_data_from_db(course_gradescope_id: str):
         assignment_names = [a.title for a in sorted_assignments]
         assignment_id_to_name = {a.id: a.title for a in sorted_assignments}
         
-        # Get all students
-        students = session.query(Student).all()
+        # Get all students for this course
+        students = session.query(Student).filter(
+            Student.course_id == course.id
+        ).all()
         
         # Get all submissions for this course
         submissions = session.query(Submission).join(Assignment).filter(
@@ -244,8 +246,10 @@ def get_summary_sheet_from_db(course_gradescope_id: str):
             categories[assignment.title] = assignment.category or "Uncategorized"
             max_points[assignment.title] = float(assignment.max_points or 0)
         
-        # Get all students
-        students = session.query(Student).order_by(Student.legal_name).all()
+        # Get all students for this course
+        students = session.query(Student).filter(
+            Student.course_id == course.id
+        ).order_by(Student.legal_name).all()
         
         # Get summary sheet data for this course
         summary_records = session.query(SummarySheet).filter(

@@ -15,18 +15,27 @@ const router = Router({ mergeParams: true });
  */
 router.get('/', async (req, res) => {
     try {
+        const { course_id: courseId } = req.query;
         const pool = getPool();
-        const query = `
+        let query = `
             SELECT 
                 COALESCE(a.category, 'Uncategorized') as category,
                 a.title as assignment_name,
                 a.max_points
             FROM assignments a
+            JOIN courses c ON a.course_id = c.id
             WHERE a.title IS NOT NULL
-            ORDER BY a.category, a.title
         `;
+
+        const params = [];
+        if (courseId) {
+            query += ` AND (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
+            params.push(courseId);
+        }
+
+        query += ` ORDER BY a.category, a.title`;
         
-        const result = await pool.query(query);
+        const result = await pool.query(query, params);
         
         // Group by category
         const grouped = {};

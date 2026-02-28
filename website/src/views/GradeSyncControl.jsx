@@ -10,6 +10,7 @@ import {
     MenuItem, 
     Alert, 
     CircularProgress,
+    LinearProgress,
     Divider
 } from '@mui/material';
 import { Refresh, Sync as SyncIcon } from '@mui/icons-material';
@@ -18,10 +19,30 @@ import apiv2 from '../utils/apiv2';
 export default function GradeSyncControl() {
     const [courses, setCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(false);
-    const [selectedCourse, setSelectedCourse] = useState('');
+    const [selectedCourse, setSelectedCourse] = useState(localStorage.getItem('selectedCourseId') || '');
     const [syncing, setSyncing] = useState(false);
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
+    const [syncJobId, setSyncJobId] = useState(null);
+    const [syncStatus, setSyncStatus] = useState(null);
+    const [syncMessage, setSyncMessage] = useState('');
+    const [syncElapsedSeconds, setSyncElapsedSeconds] = useState(0);
+    const [syncProgress, setSyncProgress] = useState(0);
+    const [syncCurrentStep, setSyncCurrentStep] = useState(0);
+    const [syncTotalSteps, setSyncTotalSteps] = useState(0);
+    const [syncSource, setSyncSource] = useState('');
+    const [syncSubCurrent, setSyncSubCurrent] = useState(0);
+    const [syncSubTotal, setSyncSubTotal] = useState(0);
+    const [syncSubLabel, setSyncSubLabel] = useState('');
+
+    const formatSourceLabel = (value) => {
+        if (!value) return '';
+        if (value === 'prairielearn') return 'PrairieLearn';
+        if (value === 'gradescope') return 'Gradescope';
+        if (value === 'iclicker') return 'iClicker';
+        if (value === 'database') return 'Database';
+        return value;
+    };
 
     const fetchCourses = () => {
         setLoadingCourses(true);
@@ -30,9 +51,11 @@ export default function GradeSyncControl() {
             .then(res => {
                 if (res.data && res.data.courses) {
                     setCourses(res.data.courses);
-                    // Default to first course if available
-                    if (res.data.courses.length > 0 && !selectedCourse) {
-                        setSelectedCourse(res.data.courses[0].id);
+                    if (res.data.courses.length > 0) {
+                        const hasSelected = res.data.courses.some((course) => course.id === selectedCourse);
+                        const nextCourse = hasSelected ? selectedCourse : res.data.courses[0].id;
+                        setSelectedCourse(nextCourse);
+                        localStorage.setItem('selectedCourseId', nextCourse);
                     }
                 }
             })
@@ -47,22 +70,121 @@ export default function GradeSyncControl() {
         fetchCourses();
     }, []);
 
+    useEffect(() => {
+        const handleSelectedCourseChanged = (event) => {
+            const nextCourse = event?.detail?.courseId || localStorage.getItem('selectedCourseId') || '';
+            setSelectedCourse(nextCourse);
+        };
+
+        window.addEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+        return () => {
+            window.removeEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!syncJobId || !syncing) {
+            return undefined;
+        }
+
+        let mounted = true;
+        const poll = () => {
+            apiv2.get(`/admin/sync/jobs/${encodeURIComponent(syncJobId)}`)
+                .then((res) => {
+                    if (!mounted) return;
+                    const job = res?.data || {};
+                    setSyncStatus(job.status || null);
+                    setSyncMessage(job.message || 'Sync in progress');
+                    setSyncElapsedSeconds(job.elapsedSeconds || 0);
+                    setSyncProgress(Number.isFinite(job.progress) ? job.progress : 0);
+                    setSyncCurrentStep(Number.isFinite(job.currentStep) ? job.currentStep : 0);
+                    setSyncTotalSteps(Number.isFinite(job.totalSteps) ? job.totalSteps : 0);
+                    setSyncSource(job.source || '');
+                    setSyncSubCurrent(Number.isFinite(job.subCurrent) ? job.subCurrent : 0);
+                    setSyncSubTotal(Number.isFinite(job.subTotal) ? job.subTotal : 0);
+                    setSyncSubLabel(job.subLabel || '');
+
+                    if (job.status === 'completed') {
+                        setResult(job.result || null);
+                        setSyncing(false);
+                        setSyncJobId(null);
+                    } else if (job.status === 'failed') {
+                        setError(job.error || job.message || 'Sync failed');
+                        setSyncing(false);
+                        setSyncJobId(null);
+                    }
+                })
+                .catch((pollErr) => {
+                    if (!mounted) return;
+                    console.error('Failed to fetch sync job status', pollErr);
+                    setError(pollErr.response?.data?.error || pollErr.message || 'Failed to fetch sync progress');
+                    setSyncing(false);
+                    setSyncJobId(null);
+                });
+        };
+
+        poll();
+        const intervalId = setInterval(poll, 2000);
+
+        return () => {
+            mounted = false;
+            clearInterval(intervalId);
+        };
+    }, [syncJobId, syncing]);
+
     const handleSync = () => {
         if (!selectedCourse) return;
         
         setSyncing(true);
+        setSyncStatus('queued');
+        setSyncMessage('Sync job queued');
+        setSyncElapsedSeconds(0);
+        setSyncProgress(0);
+        setSyncCurrentStep(0);
+        setSyncTotalSteps(0);
+        setSyncSource('');
+        setSyncSubCurrent(0);
+        setSyncSubTotal(0);
+        setSyncSubLabel('');
         setResult(null);
         setError(null);
         
-        apiv2.post(`/admin/sync/${selectedCourse}`)
+        apiv2.post(`/admin/sync/${selectedCourse}/start`)
             .then(res => {
-                setResult(res.data);
+                const job = res?.data || {};
+                setSyncJobId(job.id || null);
+                setSyncStatus(job.status || 'queued');
+                setSyncMessage(job.message || 'Sync job queued');
+                setSyncElapsedSeconds(job.elapsedSeconds || 0);
+                setSyncProgress(Number.isFinite(job.progress) ? job.progress : 0);
+                setSyncCurrentStep(Number.isFinite(job.currentStep) ? job.currentStep : 0);
+                setSyncTotalSteps(Number.isFinite(job.totalSteps) ? job.totalSteps : 0);
+                setSyncSource(job.source || '');
+                setSyncSubCurrent(Number.isFinite(job.subCurrent) ? job.subCurrent : 0);
+                setSyncSubTotal(Number.isFinite(job.subTotal) ? job.subTotal : 0);
+                setSyncSubLabel(job.subLabel || '');
             })
             .catch(err => {
                 console.error("Sync failed", err);
-                setError(err.response?.data?.detail || err.response?.data?.error || err.message || "Sync failed");
+                setError(
+                    err.response?.data?.details
+                    || err.response?.data?.detail
+                    || err.response?.data?.error
+                    || err.message
+                    || "Sync failed"
+                );
+                setSyncing(false);
             })
-            .finally(() => setSyncing(false));
+            .finally(() => {
+                // Keep syncing=true while polling active job status.
+            });
+    };
+
+    const handleCourseChange = (event) => {
+        const nextCourse = event.target.value;
+        setSelectedCourse(nextCourse);
+        localStorage.setItem('selectedCourseId', nextCourse);
+        window.dispatchEvent(new CustomEvent('selectedCourseChanged', { detail: { courseId: nextCourse } }));
     };
 
     return (
@@ -94,7 +216,7 @@ export default function GradeSyncControl() {
                             <Select
                                 value={selectedCourse}
                                 label="Course"
-                                onChange={(e) => setSelectedCourse(e.target.value)}
+                                onChange={handleCourseChange}
                                 disabled={loadingCourses || syncing || courses.length === 0}
                             >
                                 {courses.map(c => (
@@ -119,6 +241,27 @@ export default function GradeSyncControl() {
                 
                 {loadingCourses && (
                      <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'gray' }}>Loading courses...</Typography>
+                )}
+
+                {syncing && (
+                    <Alert severity="info" sx={{ mb: 3 }}>
+                        <Box>
+                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                {syncMessage || 'Sync in progress'} {syncStatus ? `(${syncStatus})` : ''} · {syncElapsedSeconds}s
+                            </Typography>
+                            <LinearProgress variant="determinate" value={Math.max(0, Math.min(100, syncProgress || 0))} sx={{ mb: 1 }} />
+                            <Typography variant="caption" color="textSecondary">
+                                {syncTotalSteps > 0
+                                    ? `Step ${Math.max(0, syncCurrentStep)}/${syncTotalSteps}${syncSource ? ` · ${formatSourceLabel(syncSource)}` : ''} · ${Math.round(syncProgress || 0)}%`
+                                    : `${Math.round(syncProgress || 0)}%`}
+                            </Typography>
+                            {syncSubTotal > 0 && (
+                                <Typography variant="caption" display="block" color="textSecondary" sx={{ mt: 0.5 }}>
+                                    {`Assignment ${Math.max(0, syncSubCurrent)}/${syncSubTotal}${syncSubLabel ? ` · ${syncSubLabel}` : ''}`}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Alert>
                 )}
 
                 {error && (

@@ -19,10 +19,16 @@ import StudentProfileContent from './StudentProfileContent';
  * StudentProfile Component - Dialog Version
  * Displays detailed student profile in a dialog
  */
-export default function StudentProfile({ open, onClose, studentEmail, studentName }) {
+export default function StudentProfile({ open, onClose, studentEmail, studentName, selectedCourse, courses = [] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [studentData, setStudentData] = useState(null);
+
+  const resolveCourseQueryId = (courseId) => {
+    if (!courseId) return '';
+    const matchedCourse = courses.find((course) => course.id === courseId);
+    return matchedCourse?.gradescope_course_id || courseId;
+  };
 
   // Load student detailed data
   useEffect(() => {
@@ -34,10 +40,16 @@ export default function StudentProfile({ open, onClose, studentEmail, studentNam
     setLoading(true);
     setError(null);
 
+    const queryCourseId = resolveCourseQueryId(selectedCourse);
+    const courseQuery = queryCourseId ? `?course_id=${encodeURIComponent(queryCourseId)}` : '';
+    const gradesQuery = queryCourseId
+      ? `/students/${encodeURIComponent(studentEmail)}/grades?format=db&course_id=${encodeURIComponent(queryCourseId)}`
+      : `/students/${encodeURIComponent(studentEmail)}/grades?format=db`;
+
     // Fetch both student grades and class category averages
     Promise.all([
-      apiv2.get(`/students/${encodeURIComponent(studentEmail)}/grades?format=db`),
-      apiv2.get('/students/category-stats')
+      apiv2.get(gradesQuery),
+      apiv2.get(`/students/category-stats${courseQuery}`)
     ])
       .then(([gradesRes, statsRes]) => {
         const data = gradesRes.data;
@@ -50,7 +62,7 @@ export default function StudentProfile({ open, onClose, studentEmail, studentNam
         setError(err.response?.data?.message || err.response?.data?.error || 'Failed to load student data');
         setLoading(false);
       });
-  }, [open, studentEmail, studentName]);
+  }, [open, studentEmail, studentName, selectedCourse, courses]);
 
   return (
     <Dialog 

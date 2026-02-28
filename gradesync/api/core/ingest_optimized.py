@@ -10,6 +10,7 @@ from sqlalchemy import and_
 from sqlalchemy.dialects.postgresql import insert
 from .db import SessionLocal
 from .models import Course, Assignment, Student, Submission
+from .ingest import _categorize_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def batch_upsert_submissions(
 
 def batch_upsert_students(
     session,
+    course_db_id: int,
     students_data: List[Dict[str, str]]
 ) -> Dict[str, int]:
     """
@@ -132,14 +134,17 @@ def batch_upsert_students(
     
     # Use PostgreSQL INSERT ... ON CONFLICT DO NOTHING
     stmt = insert(Student).values(students_data)
-    stmt = stmt.on_conflict_do_nothing(constraint='uq_student_sid_email')
+    stmt = stmt.on_conflict_do_nothing(constraint='uq_student_email_course')
     
     session.execute(stmt)
     session.commit()
     
     # Query to get all student IDs
     emails = [s['email'] for s in students_data]
-    students = session.query(Student).filter(Student.email.in_(emails)).all()
+    students = session.query(Student).filter(
+        Student.course_id == course_db_id,
+        Student.email.in_(emails)
+    ).all()
     
     email_to_id = {s.email: s.id for s in students}
     logger.info(f"Batch processed {len(students_data)} students")
@@ -185,9 +190,76 @@ def write_assignment_scores_optimized(
         # print(f"[{_ts()}] DB: Course query ({_time.time() - _step_start:.2f}s)")
         
         if not course:
-            logger.error(f"Course {course_gradescope_id} not found in database")
-            session.close()
-            return {"success": False, "error": "Course not found"}
+                logger.info(f"Course {course_gradescope_id} not found, creating...")
+
+                course_name = None
+                department = None
+                course_number = None
+                semester = None
+                year = None
+                instructor = None
+                spreadsheet_id = None
+
+                if course_config:
+                    course_name = course_config.get('name')
+                    department = course_config.get('department')
+                    course_number = course_config.get('course_number')
+                    semester = course_config.get('semester')
+                    year = course_config.get('year')
+                    instructor = course_config.get('instructor')
+                    spreadsheet = course_config.get('spreadsheet', {})
+                    if isinstance(spreadsheet, dict):
+                        spreadsheet_id = spreadsheet.get('id')
+
+                course = Course(
+                    gradescope_course_id=course_gradescope_id,
+                    name=course_name,
+                    department=department,
+                    course_number=course_number,
+                    semester=semester,
+                    year=year,
+                    instructor=instructor,
+                    spreadsheet_id=spreadsheet_id,
+                )
+                session.add(course)
+                session.flush()
+                logger.info(f"Created course {course_gradescope_id} with DB id {course.id}")
+        else:
+                if course_config:
+                    updated = False
+                    course_name = course_config.get('name')
+                    department = course_config.get('department')
+                    course_number = course_config.get('course_number')
+                    semester = course_config.get('semester')
+                    year = course_config.get('year')
+                    instructor = course_config.get('instructor')
+                    spreadsheet = course_config.get('spreadsheet', {})
+                    spreadsheet_id = spreadsheet.get('id') if isinstance(spreadsheet, dict) else None
+
+                    if course_name and course.name != course_name:
+                        course.name = course_name
+                        updated = True
+                    if department and course.department != department:
+                        course.department = department
+                        updated = True
+                    if course_number and course.course_number != course_number:
+                        course.course_number = course_number
+                        updated = True
+                    if semester and course.semester != semester:
+                        course.semester = semester
+                        updated = True
+                    if year and course.year != year:
+                        course.year = year
+                        updated = True
+                    if instructor and course.instructor != instructor:
+                        course.instructor = instructor
+                        updated = True
+                    if spreadsheet_id and course.spreadsheet_id != spreadsheet_id:
+                        course.spreadsheet_id = spreadsheet_id
+                        updated = True
+
+                    if updated:
+                        session.flush()
         
         # Get or create assignment
         _step_start = _time.time()
@@ -197,14 +269,30 @@ def write_assignment_scores_optimized(
         ).first()
         # print(f"[{_ts()}] DB: Assignment query ({_time.time() - _step_start:.2f}s)")
         
+        course_categories = None
+        if course_config and isinstance(course_config, dict):
+            course_categories = course_config.get('assignment_categories')
+        category = _categorize_assignment(assignment_name, course_categories)
+
         if not assignment:
             assignment = Assignment(
                 assignment_id=str(assignment_id),
                 course_id=course.id,
-                title=assignment_name
+                title=assignment_name,
+                category=category,
             )
             session.add(assignment)
             session.flush()
+        else:
+            updated_assignment = False
+            if assignment.title != assignment_name:
+                assignment.title = assignment_name
+                updated_assignment = True
+            if category and assignment.category != category:
+                assignment.category = category
+                updated_assignment = True
+            if updated_assignment:
+                session.flush()
         
         # Parse CSV
         reader = csv.DictReader(io.StringIO(csv_content))
@@ -213,6 +301,7 @@ def write_assignment_scores_optimized(
         students_data = []
         submissions_data = []
         seen_emails = set()
+        assignment_max_points = 0.0
         
         for row in reader:
             email = row.get('Email', '').strip()
@@ -225,15 +314,20 @@ def write_assignment_scores_optimized(
             
             # Student data
             students_data.append({
+                'course_id': course.id,
                 'email': email,
                 'sid': sid,
                 'legal_name': row.get(reader.fieldnames[0], '') if reader.fieldnames else ''
             })
             
+            parsed_max_points = float(row.get('Max Points', 0) or 0)
+            if parsed_max_points > assignment_max_points:
+                assignment_max_points = parsed_max_points
+
             # Submission data (will add student_id later)
             submission = {
                 'total_score': float(row.get('Total Score', 0) or 0),
-                'max_points': float(row.get('Max Points', 0) or 0),
+                'max_points': parsed_max_points,
                 'status': row.get('Status', ''),
                 'submission_id': row.get('Submission ID', ''),
                 'submission_time': None,  # Initialize to None, will be set if parsing succeeds
@@ -255,10 +349,14 @@ def write_assignment_scores_optimized(
                     logger.warning(f"Failed to parse submission time '{sub_time_str}' for {email}")
             
             submissions_data.append({**submission, 'email': email})
+
+        if assignment_max_points > 0 and (assignment.max_points is None or float(assignment.max_points or 0) <= 0):
+            assignment.max_points = assignment_max_points
+            session.flush()
         
         # Batch upsert students
         logger.info(f"[INFO] Starting batch_upsert_students for {assignment_name}")
-        email_to_id = batch_upsert_students(session, students_data)
+        email_to_id = batch_upsert_students(session, course.id, students_data)
         logger.info(f"[INFO] batch_upsert_students completed, got {len(email_to_id)} student IDs")
         
         # Add student_id to submissions and remove email

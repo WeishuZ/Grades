@@ -96,7 +96,7 @@ export async function getStudentSubmissionsByTime(email, courseId = null) {
     const params = [email];
     
     if (courseId) {
-        query += ` AND c.gradescope_course_id = $2`;
+        query += ` AND (c.gradescope_course_id::text = $2 OR c.id::text = $2)`;
         params.push(courseId);
     }
     
@@ -134,26 +134,42 @@ export async function getStudentSubmissionsByTime(email, courseId = null) {
 export async function getStudentSubmissionsGrouped(email, courseId = null) {
     const pool = getPool();
     
-    let query = `
-        SELECT 
-            a.title as assignment_name,
-            a.category,
-            s.total_score as score,
-            a.max_points,
-            s.submission_time,
-            s.lateness
-        FROM submissions s
-        JOIN assignments a ON s.assignment_id = a.id
-        JOIN students st ON s.student_id = st.id
-        JOIN courses c ON a.course_id = c.id
-        WHERE st.email = $1
-    `;
-    
-    const params = [email];
-    
+    let query;
+    let params;
+
     if (courseId) {
-        query += ` AND c.gradescope_course_id = $2`;
-        params.push(courseId);
+        query = `
+            SELECT
+                a.title as assignment_name,
+                a.category,
+                COALESCE(s.total_score, 0) as score,
+                a.max_points,
+                s.submission_time,
+                s.lateness
+            FROM assignments a
+            JOIN courses c ON a.course_id = c.id
+            LEFT JOIN students st ON st.email = $1 AND st.course_id = c.id
+            LEFT JOIN submissions s ON s.assignment_id = a.id AND s.student_id = st.id
+            WHERE (c.gradescope_course_id::text = $2 OR c.id::text = $2)
+            ORDER BY a.category, a.title
+        `;
+        params = [email, courseId];
+    } else {
+        query = `
+            SELECT 
+                a.title as assignment_name,
+                a.category,
+                s.total_score as score,
+                a.max_points,
+                s.submission_time,
+                s.lateness
+            FROM submissions s
+            JOIN assignments a ON s.assignment_id = a.id
+            JOIN students st ON s.student_id = st.id
+            JOIN courses c ON a.course_id = c.id
+            WHERE st.email = $1
+        `;
+        params = [email];
     }
     
     try {
@@ -212,12 +228,12 @@ export async function studentExistsInDb(email) {
  * @param {string} category - The assignment category
  * @returns {Promise<Array>} Array of {studentName, studentEmail, score, maxPoints}
  */
-export async function getAssignmentDistribution(assignmentName, category) {
+export async function getAssignmentDistribution(assignmentName, category, courseId = null) {
     const pool = getPool();
     
     // NOTE: We ignore the 'category' parameter because frontend section names
     // don't match database category values. Only match by assignment title.
-    const query = `
+    let query = `
         SELECT 
             st.legal_name as student_name,
             st.email as student_email,
@@ -226,13 +242,22 @@ export async function getAssignmentDistribution(assignmentName, category) {
         FROM submissions s
         JOIN assignments a ON s.assignment_id = a.id
         JOIN students st ON s.student_id = st.id
+        JOIN courses c ON a.course_id = c.id
         WHERE a.title = $1
           AND s.total_score IS NOT NULL
-        ORDER BY st.legal_name
     `;
+
+    const params = [assignmentName];
+
+    if (courseId) {
+        query += ` AND (c.gradescope_course_id::text = $2 OR c.id::text = $2)`;
+        params.push(courseId);
+    }
+
+    query += ` ORDER BY st.legal_name`;
     
     try {
-        const result = await pool.query(query, [assignmentName]);
+        const result = await pool.query(query, params);
         
         return result.rows.map(row => ({
             studentName: row.student_name,
@@ -251,10 +276,10 @@ export async function getAssignmentDistribution(assignmentName, category) {
  * @param {string} category - The assignment category (may not match DB, legacy parameter)
  * @returns {Promise<Array>} Array of {studentName, studentEmail, score}
  */
-export async function getCategorySummaryDistribution(category) {
+export async function getCategorySummaryDistribution(category, courseId = null) {
     const pool = getPool();
     
-    const query = `
+    let query = `
         SELECT 
             st.legal_name as student_name,
             st.email as student_email,
@@ -262,15 +287,26 @@ export async function getCategorySummaryDistribution(category) {
         FROM submissions s
         JOIN assignments a ON s.assignment_id = a.id
         JOIN students st ON s.student_id = st.id
-        WHERE a.category = $1
+        JOIN courses c ON a.course_id = c.id
+                WHERE COALESCE(a.category, 'Uncategorized') = $1
           AND s.total_score IS NOT NULL
+    `;
+
+    const params = [category];
+
+    if (courseId) {
+        query += ` AND (c.gradescope_course_id::text = $2 OR c.id::text = $2)`;
+        params.push(courseId);
+    }
+
+    query += `
         GROUP BY st.id, st.legal_name, st.email
         HAVING SUM(s.total_score) > 0
         ORDER BY st.legal_name
     `;
     
     try {
-        const result = await pool.query(query, [category]);
+        const result = await pool.query(query, params);
         
         return result.rows.map(row => ({
             studentName: row.student_name,
@@ -331,24 +367,34 @@ export async function getAssignmentsSummaryDistribution(assignmentTitles) {
  * Returns data in the format expected by admin UI
  * @returns {Promise<Array>} Array of {name, email, scores: {category: {assignmentName: score}}}
  */
-export async function getAllStudentScores() {
+export async function getAllStudentScores(courseId = null) {
     const pool = getPool();
     
-    const query = `
+    let query = `
         SELECT 
             st.legal_name as student_name,
             st.email as student_email,
-            a.category,
+            COALESCE(a.category, 'Uncategorized') as category,
             a.title as assignment_name,
             s.total_score
         FROM students st
         LEFT JOIN submissions s ON st.id = s.student_id
         LEFT JOIN assignments a ON s.assignment_id = a.id
-        ORDER BY st.email, a.category, a.title
     `;
+
+    const params = [];
+    if (courseId) {
+        query += `
+            JOIN courses c ON a.course_id = c.id
+            WHERE (c.gradescope_course_id::text = $1 OR c.id::text = $1)
+        `;
+        params.push(courseId);
+    }
+
+    query += ` ORDER BY st.email, COALESCE(a.category, 'Uncategorized'), a.title`;
     
     try {
-        const result = await pool.query(query);
+        const result = await pool.query(query, params);
         
         // Group by student, then by category, then by assignment
         const studentMap = new Map();
@@ -383,28 +429,65 @@ export async function getAllStudentScores() {
 }
 
 /**
+ * Gets students with submissions in a specific course.
+ * @param {string} courseId - Course ID or Gradescope course ID
+ * @returns {Promise<Array<Array<string>>>} List of [legalName, email]
+ */
+export async function getStudentsByCourse(courseId) {
+    const pool = getPool();
+
+    const query = `
+        SELECT DISTINCT
+            COALESCE(st.legal_name, st.email) AS student_name,
+            st.email AS student_email
+        FROM submissions s
+        JOIN students st ON s.student_id = st.id
+        JOIN assignments a ON s.assignment_id = a.id
+        JOIN courses c ON a.course_id = c.id
+        WHERE (c.gradescope_course_id::text = $1 OR c.id::text = $1)
+        ORDER BY student_name ASC
+    `;
+
+    try {
+        const result = await pool.query(query, [courseId]);
+        return result.rows.map((row) => [row.student_name, row.student_email]);
+    } catch (err) {
+        console.error('Error fetching students by course:', err);
+        throw err;
+    }
+}
+
+/**
  * Gets class average percentage for each category
  * @returns {Promise<Object>} Object with category names as keys and average percentages as values
  */
-export async function getCategoryAverages() {
+export async function getCategoryAverages(courseId = null) {
     const pool = getPool();
     
     try {
-        const query = `
+        let query = `
             SELECT 
                 a.category,
                 AVG((s.total_score / NULLIF(a.max_points, 0)) * 100) as avg_percentage
             FROM submissions s
             JOIN assignments a ON s.assignment_id = a.id
+            JOIN courses c ON a.course_id = c.id
             WHERE a.category IS NOT NULL 
               AND a.category != 'Uncategorized'
               AND a.category != 'uncategorized'
               AND s.total_score IS NOT NULL
               AND a.max_points > 0
-            GROUP BY a.category
         `;
+
+        const params = [];
+        if (courseId) {
+            query += ` AND (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
+            params.push(courseId);
+        }
+
+        query += ` GROUP BY a.category`;
         
-        const result = await pool.query(query);
+        const result = await pool.query(query, params);
         
         const categoryAverages = {};
         result.rows.forEach(row => {

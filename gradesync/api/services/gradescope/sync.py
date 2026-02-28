@@ -3,7 +3,7 @@ Gradescope Sync Module
 
 High-level sync operations for Gradescope data.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 import logging
 from datetime import datetime
 from .client import GradescopeClient
@@ -52,7 +52,8 @@ class GradescopeSync:
         spreadsheet_id: Optional[str] = None,
         save_to_db: bool = True,
         course_name: Optional[str] = None,
-        course_config: Optional[Dict[str, Any]] = None
+        course_config: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """
         Sync a Gradescope course.
@@ -69,11 +70,22 @@ class GradescopeSync:
         """
         # print(f"[DEBUG] Starting Gradescope sync for course {course_id}")
         logger.info(f"Starting Gradescope sync for course {course_id}")
+
+        def emit_progress(payload: Dict[str, Any]):
+            if progress_callback:
+                progress_callback(payload)
         
         try:
             # Login to Gradescope
             # print("[DEBUG] Attempting Gradescope login...")
             logger.info("Attempting Gradescope login...")
+            emit_progress({
+                "event": "progress",
+                "status": "running",
+                "stage": "login",
+                "message": "Logging in to Gradescope...",
+                "progress": 2,
+            })
             login_result = self.gs_client.log_in(self.email, self.password)
             # print(f"[DEBUG] Login result: {login_result}")
             logger.info(f"Login result: {login_result}")
@@ -84,6 +96,13 @@ class GradescopeSync:
             # Get assignments for the course
             # print("[DEBUG] Fetching course assignments...")
             logger.info("Fetching course assignments...")
+            emit_progress({
+                "event": "progress",
+                "status": "running",
+                "stage": "fetch_assignments",
+                "message": "Loading assignment list...",
+                "progress": 5,
+            })
             assignments_data = {}
             students_data = set()
             sheets_data = []  # 收集所有需要导出到 Sheets 的数据
@@ -91,10 +110,27 @@ class GradescopeSync:
             # Download all assignments and their scores
             # print(f"[DEBUG] About to call _get_course_assignments({course_id})")
             course_assignments = self._get_course_assignments(course_id)
+            if not course_assignments:
+                raise RuntimeError(
+                    f"No assignments found for course {course_id}. "
+                    "This is usually caused by missing course access for the configured Gradescope account."
+                )
             # print(f"[DEBUG] Retrieved {len(course_assignments)} assignments from Gradescope")
             logger.info(f"Retrieved {len(course_assignments)} assignments from Gradescope")
+            total_assignments = len(course_assignments)
             
-            for assignment_id, assignment_name in course_assignments.items():
+            for index, (assignment_id, assignment_name) in enumerate(course_assignments.items(), start=1):
+                start_pct = int(10 + ((index - 1) / max(1, total_assignments)) * 80)
+                emit_progress({
+                    "event": "progress",
+                    "status": "running",
+                    "stage": "assignment_start",
+                    "message": f"Syncing assignment {index}/{total_assignments}: {assignment_name}",
+                    "progress": start_pct,
+                    "subCurrent": index,
+                    "subTotal": total_assignments,
+                    "subLabel": assignment_name,
+                })
                 logger.info(f"Downloading scores for: {assignment_name} (ID: {assignment_id})")
                 
                 try:
@@ -151,9 +187,32 @@ class GradescopeSync:
                         for row in reader:
                             if 'SID' in row:
                                 students_data.add(row['SID'])
+
+                        done_pct = int(10 + (index / max(1, total_assignments)) * 80)
+                        emit_progress({
+                            "event": "progress",
+                            "status": "running",
+                            "stage": "assignment_done",
+                            "message": f"Finished assignment {index}/{total_assignments}: {assignment_name}",
+                            "progress": done_pct,
+                            "subCurrent": index,
+                            "subTotal": total_assignments,
+                            "subLabel": assignment_name,
+                        })
                 
                 except Exception as e:
                     logger.error(f"Failed to sync {assignment_name}: {e}")
+                    done_pct = int(10 + (index / max(1, total_assignments)) * 80)
+                    emit_progress({
+                        "event": "progress",
+                        "status": "running",
+                        "stage": "assignment_failed",
+                        "message": f"Failed assignment {index}/{total_assignments}: {assignment_name}",
+                        "progress": done_pct,
+                        "subCurrent": index,
+                        "subTotal": total_assignments,
+                        "subLabel": assignment_name,
+                    })
                     # print(f"[{_ts()}] Error: {assignment_name}: {e}", flush=True)
                     continue
             
@@ -162,6 +221,15 @@ class GradescopeSync:
             if spreadsheet_id and sheets_data:
                 # print(f"[{_ts()}] Starting Sheets export...", flush=True)
                 logger.info(f"Exporting summary to Sheets...")
+                emit_progress({
+                    "event": "progress",
+                    "status": "running",
+                    "stage": "export_sheets",
+                    "message": "Exporting summary to Google Sheets...",
+                    "progress": 95,
+                    "subCurrent": total_assignments,
+                    "subTotal": total_assignments,
+                })
                 self._export_summary_to_sheets(spreadsheet_id, course_id)
                 # print(f"[{_ts()}] Sheets export done", flush=True)
             
@@ -199,7 +267,7 @@ class GradescopeSync:
             Dict mapping assignment_id -> assignment_name
         """
         import re
-        import json
+        import html
         
         # print(f"[DEBUG] Getting assignments for course {course_id}")
         
@@ -207,30 +275,58 @@ class GradescopeSync:
             # Get course assignments page
             url = f"{self.gs_client.base_url}/courses/{course_id}/assignments"
             response = self.gs_client.session.get(url)
+
+            if response.status_code in (401, 403):
+                raise PermissionError(
+                    f"Unauthorized to access Gradescope course {course_id}. "
+                    "Verify GRADESCOPE_EMAIL has instructor/TA access to this course."
+                )
+
             response.raise_for_status()
             
-            # Get response content as string
             response_text = response.text
-            
-            # Find the gon (Global Object Notation) data which contains assignment info
-            # Look for patterns like: "id":12345,"title":"Assignment Name"
-            pattern = r'"id":(\d+),"title":"([^"]*)"'
-            matches = re.findall(pattern, response_text)
-            
+
             assignments = {}
-            for assignment_id, assignment_name in matches:
+
+            def _add_assignment(assignment_id: str, assignment_name: str):
+                assignment_id = str(assignment_id).strip()
+                assignment_name = html.unescape((assignment_name or '').strip())
+                assignment_name = re.sub(r'\s+', ' ', assignment_name)
+
+                if not assignment_id or not assignment_name:
+                    return
                 assignments[assignment_id] = assignment_name
+
+            # Strategy 1: JSON-like objects with "id" and "title" (id before title)
+            for assignment_id, assignment_name in re.findall(
+                r'"id"\s*:\s*(\d+)\s*,\s*"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"',
+                response_text,
+            ):
+                _add_assignment(assignment_id, assignment_name.replace('\\"', '"'))
+
+            # Strategy 2: JSON-like objects with "title" and "id" (title before id)
+            for assignment_name, assignment_id in re.findall(
+                r'"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*,\s*"id"\s*:\s*(\d+)',
+                response_text,
+            ):
+                _add_assignment(assignment_id, assignment_name.replace('\\"', '"'))
+
+            # Strategy 3 (fallback): parse assignment links from HTML
+            # e.g. <a href="/courses/<course_id>/assignments/<assignment_id>">Assignment Name</a>
+            link_pattern = rf'<a[^>]+href="/courses/{re.escape(str(course_id))}/assignments/(\d+)"[^>]*>(.*?)</a>'
+            for assignment_id, anchor_inner_html in re.findall(link_pattern, response_text, flags=re.IGNORECASE | re.DOTALL):
+                assignment_name = re.sub(r'<[^>]+>', '', anchor_inner_html)
+                _add_assignment(assignment_id, assignment_name)
             
             # print(f"[DEBUG] Found {len(assignments)} assignments: {assignments}")
-            logger.info(f"Found {len(assignments)} assignments")
+            logger.info(f"Found {len(assignments)} assignments for course {course_id}")
             return assignments
             
+        except PermissionError:
+            raise
         except Exception as e:
-            # print(f"[DEBUG] Error getting assignments: {e}")
-            logger.error(f"Failed to get assignments: {e}")
-            # import traceback
-            # traceback.print_exc()
-            return {}
+            logger.error(f"Failed to get assignments for course {course_id}: {e}")
+            raise RuntimeError(f"Failed to fetch assignments for course {course_id}: {e}") from e
     
     def _save_assignment_to_db(
         self,
@@ -373,8 +469,10 @@ class GradescopeSync:
                 
                 # print(f"[{_ts()}] SHEETS: Found {len(assignments)} assignments", flush=True)
                 
-                # 批量查询所有 students
-                students = session.query(Student).order_by(Student.legal_name).all()
+                # 批量查询当前课程 students
+                students = session.query(Student).filter(
+                    Student.course_id == course.id
+                ).order_by(Student.legal_name).all()
                 # print(f"[{_ts()}] SHEETS: Found {len(students)} students", flush=True)
                 
                 # 批量查询所有 submissions（关键优化！）

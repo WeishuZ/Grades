@@ -10,7 +10,8 @@ const router = Router({ mergeParams: true });
  */
 router.get('/', async (req, res) => {
     try {
-        const categoryAverages = await getCategoryAverages();
+        const { course_id: courseId } = req.query;
+        const categoryAverages = await getCategoryAverages(courseId || null);
         res.json(categoryAverages);
     } catch (error) {
         console.error('Error fetching category stats:', error);

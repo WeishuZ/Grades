@@ -13,7 +13,6 @@ import {
     IconButton,
     useMediaQuery,
     FormControl,
-    InputLabel,
     Select,
 } from '@mui/material';
 import {
@@ -36,9 +35,7 @@ export default function ButtonAppBar() {
     const [loggedIn, setLoginStatus] = useState(
         !!localStorage.getItem('token'),
     );
-    const { selectedStudent, setSelectedStudent } = useContext(
-        StudentSelectionContext,
-    );
+    const { setSelectedStudent } = useContext(StudentSelectionContext);
     const [isAdmin, setAdminStatus] = useState(false);
     const [profilePicture, updateProfilePicture] = useState('');
     const tabList = [
@@ -116,12 +113,10 @@ export default function ButtonAppBar() {
         window.location.reload(false);
     }
 
-    // Moved from home.js
-    function loadStudentData(e) {
-        setSelectedStudent(e.target.value);
-    }
-
-    const [students, setStudents] = useState([]);
+    const [courses, setCourses] = useState([]);
+    const [selectedCourse, setSelectedCourse] = useState(
+        localStorage.getItem('selectedCourseId') || '',
+    );
     useEffect(() => {
         let mounted = true;
         if (isAdmin) {
@@ -130,15 +125,36 @@ export default function ButtonAppBar() {
                     const sortedStudents = res.data.students.sort((a, b) =>
                         a[0].localeCompare(b[0])
                     );
-                    setStudents(sortedStudents);
                     if (sortedStudents.length > 0) {
                         setSelectedStudent(sortedStudents[0][1]);
                     }
                 }
             });
+
+            apiv2.get('/admin/sync')
+                .then((res) => {
+                    if (!mounted) return;
+
+                    const fetchedCourses = res?.data?.courses || [];
+                    setCourses(fetchedCourses);
+
+                    if (fetchedCourses.length === 0) return;
+
+                    const hasSelected = fetchedCourses.some((course) => course.id === selectedCourse);
+                    const nextCourse = hasSelected ? selectedCourse : fetchedCourses[0].id;
+
+                    setSelectedCourse(nextCourse);
+                    localStorage.setItem('selectedCourseId', nextCourse);
+                    window.dispatchEvent(new CustomEvent('selectedCourseChanged', {
+                        detail: { courseId: nextCourse },
+                    }));
+                })
+                .catch((err) => {
+                    console.error('Failed to load courses in navbar:', err);
+                });
         }
         return () => (mounted = false);
-    }, [isAdmin]);
+    }, [isAdmin, selectedCourse, setSelectedStudent]);
 
     useEffect(() => {
         let mounted = true;
@@ -196,6 +212,49 @@ export default function ButtonAppBar() {
                     </Box>
                     {loggedIn ? (
                         <>
+                            {isAdmin && courses.length > 0 && (
+                                <FormControl
+                                    size='small'
+                                    sx={{
+                                        minWidth: 220,
+                                        mr: 1.5,
+                                        '& .MuiOutlinedInput-root': {
+                                            color: 'white',
+                                            '& fieldset': {
+                                                borderColor: 'rgba(255,255,255,0.5)',
+                                            },
+                                            '&:hover fieldset': {
+                                                borderColor: 'white',
+                                            },
+                                            '&.Mui-focused fieldset': {
+                                                borderColor: 'white',
+                                            },
+                                        },
+                                        '& .MuiSvgIcon-root': {
+                                            color: 'white',
+                                        },
+                                    }}
+                                >
+                                    <Select
+                                        value={selectedCourse}
+                                        displayEmpty
+                                        onChange={(e) => {
+                                            const nextCourse = e.target.value;
+                                            setSelectedCourse(nextCourse);
+                                            localStorage.setItem('selectedCourseId', nextCourse);
+                                            window.dispatchEvent(new CustomEvent('selectedCourseChanged', {
+                                                detail: { courseId: nextCourse },
+                                            }));
+                                        }}
+                                    >
+                                        {courses.map((course) => (
+                                            <MenuItem key={course.id} value={course.id}>
+                                                {course.name} ({course.id})
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            )}
                             <IconButton 
                                 aria-label="user profile"
                                 onClick={handleMenu}

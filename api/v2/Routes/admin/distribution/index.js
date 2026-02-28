@@ -18,6 +18,7 @@ const router = Router({ mergeParams: true });
 router.get('/:section/:name', async (req, res) => {
     try {
         const { section, name } = req.params;
+        const { course_id: courseId } = req.query;
         const startTime = Date.now();
         
         console.log(`[DEBUG] Distribution request - section: "${section}", name: "${name}"`);
@@ -32,13 +33,13 @@ router.get('/:section/:name', async (req, res) => {
                 console.log(`[PERF] Fetching category summary from DB: ${section}`);
                 
                 // NEW: Directly query database by category (section name = category name now)
-                scoreData = await getCategorySummaryDistribution(section);
+                scoreData = await getCategorySummaryDistribution(section, courseId || null);
                 dataSource = 'database-summary';
                 
                 console.log(`[DEBUG] DB returned ${scoreData.length} students for category "${section}"`);
             } else {
                 console.log(`[PERF] Fetching assignment distribution from DB: ${section}/${name}`);
-                const dbData = await getAssignmentDistribution(name, section);
+                const dbData = await getAssignmentDistribution(name, section, courseId || null);
                 scoreData = dbData;
                 console.log(`[DEBUG] DB returned ${dbData.length} records`);
                 if (dbData.length > 0 && dbData[0].maxPoints) {

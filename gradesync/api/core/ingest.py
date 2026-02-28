@@ -232,24 +232,37 @@ def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str,
                 logger.info(f"CSV has Submission Time column: {submission_time_str is not None}")
                 logger.info(f"Sample Submission Time value: '{submission_time_str}'")
 
-            # Upsert student - 直接用 SID 匹配
+            # Upsert student - 同一课程内按 email 去重
             student = None
-            if sid and sid.strip():  # Only process if SID is not empty
-                student = session.query(Student).filter(Student.sid == sid).first()
-            
+            if email and email.strip():
+                student = session.query(Student).filter(
+                    Student.course_id == course.id,
+                    Student.email == email
+                ).first()
+
             if not student and sid and sid.strip():
+                student = session.query(Student).filter(
+                    Student.course_id == course.id,
+                    Student.sid == sid
+                ).first()
+            
+            if not student and (email or (sid and sid.strip())):
                 # 学生不存在，创建新记录
-                student = Student(sid=sid, email=email, legal_name=name)
+                student = Student(course_id=course.id, sid=sid, email=email, legal_name=name)
                 session.add(student)
                 session.flush()
             elif student:
                 # 学生已存在，更新 email 和 legal_name（以防有变化）
+                if student.course_id != course.id:
+                    student.course_id = course.id
                 if email and student.email != email:
                     student.email = email
+                if sid and student.sid != sid:
+                    student.sid = sid
                 if name and student.legal_name != name:
                     student.legal_name = name
             else:
-                # SID为空，跳过此学生
+                # email 和 SID 都为空，跳过此学生
                 continue
 
             # Build submission object
@@ -315,7 +328,7 @@ def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str,
                 session.add(new_sub)
 
         # Update course student count dynamically based on actual students in DB
-        student_count = session.query(Student).count()
+        student_count = session.query(Student).filter(Student.course_id == course.id).count()
         if course.number_of_students != student_count:
             course.number_of_students = student_count
 

@@ -89,7 +89,7 @@ services:
       - db
     ports:
       - "8001:8000"
-    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --workers 2
     restart: unless-stopped
 
 networks:

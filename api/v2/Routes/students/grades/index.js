@@ -14,7 +14,7 @@ const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
     const { id } = req.params; // the id is the student's email
-    const { sort, format } = req.query; // sort: 'time' or 'assignment' (default), format: 'list' or 'grouped'
+    const { sort, format, course_id: courseId } = req.query; // sort: 'time' or 'assignment' (default), format: 'list' or 'grouped'
     
     try {
         // Handle time-based sorting from PostgreSQL
@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
                 });
             }
             
-            const submissionsByTime = await getStudentSubmissionsByTime(id);
+            const submissionsByTime = await getStudentSubmissionsByTime(id, courseId || null);
             
             if (!submissionsByTime || submissionsByTime.length === 0) {
                 return res.status(200).json([]);
@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
                 );
             }
             
-            const groupedSubmissions = await getStudentSubmissionsGrouped(id);
+            const groupedSubmissions = await getStudentSubmissionsGrouped(id, courseId || null);
             const maxScores = await getMaxScores();
             
             // Merge max scores from Redis with DB scores that may have submission times
@@ -82,6 +82,11 @@ router.get('/', async (req, res) => {
         const hasStudentData = studentScores && Object.keys(studentScores).length > 0;
         const hasMaxScores = maxScores && Object.keys(maxScores).length > 0;
         
+        if (courseId && !isAdmin(id)) {
+            const groupedSubmissions = await getStudentSubmissionsGrouped(id, courseId);
+            return res.status(200).json(groupedSubmissions || {});
+        }
+
         if (!hasStudentData && !isAdmin(id)) {
             // Redis has no data, try PostgreSQL fallback
             console.log(`Redis data not found for ${id}, using database fallback`);

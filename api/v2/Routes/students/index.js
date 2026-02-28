@@ -9,6 +9,7 @@ import CategoryStatsRouter from './category-stats/index.js';
 import { validateAdminOrStudentMiddleware } from '../../../lib/authlib.mjs';
 import { validateAdminMiddleware } from '../../../lib/authlib.mjs';
 import { getStudents } from '../../../lib/redisHelper.mjs';
+import { getStudentsByCourse } from '../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
@@ -33,8 +34,15 @@ router.use('/:email/concept-structure', ConceptStructureRouter);
 
 router.use('/:email', validateAdminOrStudentMiddleware);
 
-router.get('/', validateAdminMiddleware, async (_, res) => {
+router.get('/', validateAdminMiddleware, async (req, res) => {
     try {
+        const { course_id: courseId } = req.query;
+
+        if (courseId) {
+            const students = await getStudentsByCourse(courseId);
+            return res.status(200).json({ students });
+        }
+
         const students = await getStudents();
         return res.status(200).json({ students });
     } catch (err) {

@@ -10,13 +10,13 @@ import logging
 import sys
 import os
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Callable
 from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.config_manager import get_course_config, EnvConfig
+from api.config_manager import get_course_config, get_config_manager, EnvConfig
 from api.core.db import SessionLocal
 from api.core.models import Course
 from api.core.ingest import save_summary_sheet_to_db
@@ -49,6 +49,8 @@ class GradeSyncService:
     
     def __init__(self, course_id: str):
         self.course_id = course_id
+        # Always reload config to pick up runtime edits to config.json
+        get_config_manager().reload()
         self.config = get_course_config(course_id)
         
         if not self.config:
@@ -56,7 +58,7 @@ class GradeSyncService:
         
         self.results: List[GradeSyncResult] = []
     
-    def sync_all(self) -> Dict[str, Any]:
+    def sync_all(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
         """
         Sync grades from all enabled sources for this course.
         
@@ -64,32 +66,97 @@ class GradeSyncService:
             Dict with sync results from each source
         """
         logger.info(f"Starting grade sync for course: {self.course_id}")
-        
-        # Sync Gradescope
+
+        def emit_progress(payload: Dict[str, Any]):
+            if progress_callback:
+                progress_callback(payload)
+
+        steps = []
         if self.config.gradescope_enabled:
-            result = self._sync_gradescope()
-            self.results.append(result)
+            steps.append(("gradescope", "Syncing Gradescope", self._sync_gradescope))
         else:
             logger.info("Gradescope sync disabled for this course")
-        
-        # Sync PrairieLearn
+
         if self.config.prairielearn_enabled:
-            result = self._sync_prairielearn()
-            self.results.append(result)
+            steps.append(("prairielearn", "Syncing PrairieLearn", self._sync_prairielearn))
         else:
             logger.info("PrairieLearn sync disabled for this course")
-        
-        # Sync iClicker
+
         if self.config.iclicker_enabled:
-            result = self._sync_iclicker()
-            self.results.append(result)
+            steps.append(("iclicker", "Syncing iClicker", self._sync_iclicker))
         else:
             logger.info("iClicker sync disabled for this course")
-        
-        # Update summary sheets in database if enabled
+
         if self.config.database_enabled:
-            result = self._update_summary_sheets()
+            steps.append(("database", "Updating summary sheets", self._update_summary_sheets))
+
+        total_steps = len(steps)
+
+        if total_steps == 0:
+            emit_progress({
+                "event": "progress",
+                "status": "running",
+                "message": "No sync sources enabled for this course",
+                "progress": 100,
+                "currentStep": 0,
+                "totalSteps": 0,
+                "source": None,
+                "stage": "completed",
+            })
+
+        for idx, (source, label, step_fn) in enumerate(steps, start=1):
+            base_progress = int(((idx - 1) / total_steps) * 100)
+            done_progress = int((idx / total_steps) * 100)
+
+            emit_progress({
+                "event": "progress",
+                "status": "running",
+                "message": f"{label}...",
+                "progress": max(1, base_progress),
+                "currentStep": idx,
+                "totalSteps": total_steps,
+                "source": source,
+                "stage": "start",
+            })
+
+            def step_progress(event: Dict[str, Any]):
+                step_raw_progress = event.get("progress", 0)
+                try:
+                    step_progress_pct = max(0, min(100, int(step_raw_progress)))
+                except Exception:
+                    step_progress_pct = 0
+
+                overall_progress = int(base_progress + ((done_progress - base_progress) * step_progress_pct / 100))
+
+                emit_progress({
+                    "event": "progress",
+                    "status": event.get("status", "running"),
+                    "message": event.get("message", f"{label}..."),
+                    "progress": max(1, min(100, overall_progress)),
+                    "currentStep": idx,
+                    "totalSteps": total_steps,
+                    "source": source,
+                    "stage": event.get("stage", "running"),
+                    "sourceSuccess": event.get("sourceSuccess"),
+                    "subCurrent": event.get("subCurrent"),
+                    "subTotal": event.get("subTotal"),
+                    "subLabel": event.get("subLabel"),
+                })
+
+            result = step_fn(progress_callback=step_progress)
             self.results.append(result)
+
+            emit_progress({
+                "event": "progress",
+                "status": "running",
+                "message": result.message,
+                "progress": done_progress,
+                "currentStep": idx,
+                "totalSteps": total_steps,
+                "source": source,
+                "stage": "completed" if result.success else "failed",
+                "sourceSuccess": result.success,
+            })
         
         # Compile summary
         summary = {
@@ -103,7 +170,7 @@ class GradeSyncService:
         logger.info(f"Grade sync completed for {self.course_id}. Overall success: {summary['overall_success']}")
         return summary
     
-    def _sync_gradescope(self) -> GradeSyncResult:
+    def _sync_gradescope(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> GradeSyncResult:
         """Sync grades from Gradescope using new services layer."""
         logger.info(f"Syncing Gradescope for course {self.config.gradescope_course_id}")
         
@@ -126,7 +193,8 @@ class GradeSyncService:
                 spreadsheet_id=self.config.spreadsheet_id,
                 save_to_db=self.config.database_enabled,
                 course_name=self.config.name,
-                course_config=self.config.to_dict()
+                course_config=self.config.to_dict(),
+                progress_callback=progress_callback,
             )
             
             return GradeSyncResult(
@@ -144,7 +212,7 @@ class GradeSyncService:
                 message=f"Gradescope sync failed: {str(e)}"
             )
     
-    def _sync_prairielearn(self) -> GradeSyncResult:
+    def _sync_prairielearn(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> GradeSyncResult:
         """Sync grades from PrairieLearn using new services layer."""
         logger.info(f"Syncing PrairieLearn for course {self.config.prairielearn_course_id}")
         
@@ -182,7 +250,7 @@ class GradeSyncService:
                 message=f"PrairieLearn sync failed: {str(e)}"
             )
     
-    def _sync_iclicker(self) -> GradeSyncResult:
+    def _sync_iclicker(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> GradeSyncResult:
         """Sync grades from iClicker using new services layer."""
         logger.info(f"Syncing iClicker for course {self.course_id}")
         
@@ -221,7 +289,7 @@ class GradeSyncService:
                 message=f"iClicker sync failed: {str(e)}"
             )
     
-    def _update_summary_sheets(self) -> GradeSyncResult:
+    def _update_summary_sheets(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> GradeSyncResult:
         """Update summary sheets in database."""
         logger.info(f"Updating summary sheets in database for {self.course_id}")
         
@@ -251,7 +319,9 @@ class GradeSyncService:
                     Assignment.course_id == course.id
                 ).all()
                 
-                students = session.query(Student).all()
+                students = session.query(Student).filter(
+                    Student.course_id == course.id
+                ).all()
                 
                 submissions = session.query(Submission).join(Assignment).filter(
                     Assignment.course_id == course.id
@@ -299,7 +369,10 @@ class GradeSyncService:
             )
 
 
-def sync_course_grades(course_id: str) -> Dict[str, Any]:
+def sync_course_grades(
+    course_id: str,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+) -> Dict[str, Any]:
     """
     Convenience function to sync all grades for a course.
     
@@ -310,4 +383,4 @@ def sync_course_grades(course_id: str) -> Dict[str, Any]:
         Dict with sync results
     """
     service = GradeSyncService(course_id)
-    return service.sync_all()
+    return service.sync_all(progress_callback=progress_callback)

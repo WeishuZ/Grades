@@ -177,12 +177,13 @@ class Assignment(Base):
 class Student(Base):
     __tablename__ = "students"
     id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=True, index=True)
     sid = Column(String, index=True)
     email = Column(String, index=True)
     legal_name = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
-        UniqueConstraint('sid', 'email', name='uq_student_sid_email'),
+        UniqueConstraint('email', 'course_id', name='uq_student_email_course'),
     )
 
 

@@ -16,10 +16,12 @@ Version: 2.0.0
 
 # FastAPI and web framework imports
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 import requests
 from typing import Optional, List, Dict, Any
 import logging
+import threading
+from queue import Queue, Empty
 
 # Environment variables
 from dotenv import load_dotenv
@@ -185,6 +187,7 @@ def list_courses():
         for course_config in config_manager.list_course_configs():
             courses.append({
                 "id": course_config.id,
+                "gradescope_course_id": course_config.gradescope_course_id,
                 "name": course_config.name,
                 "department": course_config.department,
                 "course_number": course_config.course_number,
@@ -276,6 +279,87 @@ async def sync_all_grades(course_id: str, background_tasks: BackgroundTasks):
             status_code=500,
             detail=f"Failed to sync grades: {str(e)}"
         )
+
+
+@app.post(
+    "/api/sync/{course_id}/stream",
+    tags=["Synchronization"],
+    summary="Sync All Grades (Streaming Progress)",
+    description="Synchronize grades and stream structured progress events as NDJSON"
+)
+async def sync_all_grades_stream(course_id: str):
+    """
+    Sync all grades for a specific course and stream progress updates.
+
+    Response format: NDJSON (one JSON object per line)
+    - progress events while sync is running
+    - final event when completed
+    - error event if sync fails
+    """
+    config_manager = get_config_manager()
+    course_config = config_manager.get_course(course_id)
+
+    if not course_config:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Course not found: {course_id}. Available courses: {config_manager.list_courses()}"
+        )
+
+    events_queue: Queue = Queue()
+    sentinel = object()
+
+    def enqueue(event: Dict[str, Any]):
+        events_queue.put(event)
+
+    def worker():
+        try:
+            enqueue({
+                "event": "progress",
+                "status": "running",
+                "message": "Sync started",
+                "progress": 1,
+                "currentStep": 0,
+                "totalSteps": 0,
+                "source": None,
+                "stage": "start",
+            })
+
+            result = sync_course_grades(course_id, progress_callback=enqueue)
+            enqueue({
+                "event": "final",
+                "status": "completed",
+                "message": "Sync completed",
+                "progress": 100,
+                "result": result,
+            })
+        except Exception as exc:
+            logger.exception(f"Failed to sync grades for {course_id} (stream)")
+            enqueue({
+                "event": "error",
+                "status": "failed",
+                "message": f"Failed to sync grades: {str(exc)}",
+                "progress": 100,
+                "error": str(exc),
+            })
+        finally:
+            events_queue.put(sentinel)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def event_stream():
+        while True:
+            try:
+                item = events_queue.get(timeout=30)
+            except Empty:
+                yield json.dumps({"event": "heartbeat"}) + "\n"
+                continue
+
+            if item is sentinel:
+                break
+
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 @app.post(

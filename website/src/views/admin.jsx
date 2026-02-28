@@ -58,6 +58,9 @@ ChartJS.register(
 export default function Admin() {
   // TAB STATE
   const [tab, setTab] = useState(0);
+  const [courses, setCourses] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(localStorage.getItem('selectedCourseId') || '');
   
   // Performance optimization for Select All
   const [isPending, startTransition] = useTransition();
@@ -98,6 +101,49 @@ export default function Admin() {
   // --- STUDENT PAGE CUSTOMIZATION ---
   const [visibleAssignments, setVisibleAssignments] = useState({}); // {assignmentName: boolean}
   const [selectorDialogOpen, setSelectorDialogOpen] = useState(null); // Section name or null
+
+  const buildCourseQuery = (courseId) => {
+    if (!courseId) return '';
+    const matchedCourse = courses.find((course) => course.id === courseId);
+    const resolvedCourseId = matchedCourse?.gradescope_course_id || courseId;
+    return `?course_id=${encodeURIComponent(resolvedCourseId)}`;
+  };
+
+  // Load courses for multi-course support
+  useEffect(() => {
+    setLoadingCourses(true);
+    apiv2.get('/admin/sync')
+      .then((res) => {
+        const fetchedCourses = res?.data?.courses || [];
+        setCourses(fetchedCourses);
+
+        if (fetchedCourses.length === 0) {
+          return;
+        }
+
+        const hasSelected = fetchedCourses.some((course) => course.id === selectedCourse);
+        const nextCourse = hasSelected ? selectedCourse : fetchedCourses[0].id;
+
+        setSelectedCourse(nextCourse);
+        localStorage.setItem('selectedCourseId', nextCourse);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch courses for admin page:', err);
+      })
+      .finally(() => setLoadingCourses(false));
+  }, []);
+
+  useEffect(() => {
+    const handleSelectedCourseChanged = (event) => {
+      const nextCourse = event?.detail?.courseId || localStorage.getItem('selectedCourseId') || '';
+      setSelectedCourse(nextCourse);
+    };
+
+    window.addEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+    return () => {
+      window.removeEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+    };
+  }, []);
   const handleSort = col => {
     if (sortBy === col) setSortAsc(!sortAsc);
     else {
@@ -108,8 +154,13 @@ export default function Admin() {
 
   /** 1) Load assignment categories with max points from DATABASE (not Redis) **/
   useEffect(() => {
+    if (!selectedCourse) return;
+
+    setLoadingA(true);
+    setErrorA(null);
+
     // NEW: Get assignments directly from database instead of Redis
-    apiv2.get('/admin/assignments')
+    apiv2.get(`/admin/assignments${buildCourseQuery(selectedCourse)}`)
       .then(res => {
         const categoriesData = res.data; // { "Projects": { "Project 1": 100, ... }, "Labs": { ... }, ... }
         const items = Object.entries(categoriesData)
@@ -131,7 +182,7 @@ export default function Admin() {
       })
       .catch(err => setErrorA(err.message || 'Failed to load assignments'))
       .finally(() => setLoadingA(false));
-  }, []);
+  }, [selectedCourse, courses]);
 
   /** 2) Filter assignments **/
   useEffect(() => {
@@ -153,9 +204,10 @@ export default function Admin() {
     setStatsError(null);
 
     const { section, name } = selected;
+    const query = buildCourseQuery(selectedCourse);
     Promise.all([
-      apiv2.get(`/admin/stats/${encodeURIComponent(section)}/${encodeURIComponent(name)}`),
-      apiv2.get(`/admin/distribution/${encodeURIComponent(section)}/${encodeURIComponent(name)}`)
+      apiv2.get(`/admin/stats/${encodeURIComponent(section)}/${encodeURIComponent(name)}${query}`),
+      apiv2.get(`/admin/distribution/${encodeURIComponent(section)}/${encodeURIComponent(name)}${query}`)
     ])
       .then(([statsRes, distRes]) => {
         setStats(statsRes.data);
@@ -163,19 +215,28 @@ export default function Admin() {
       })
       .catch(err => setStatsError(err.message || 'Failed to load stats'))
       .finally(() => setStatsLoading(false));
-  }, [selected]);
+  }, [selected, selectedCourse, courses]);
 
   /** 4) Load student-scores when Students tab is activated **/
   useEffect(() => {
     if (tab !== 1) return;
+    if (!selectedCourse) return;
     setLoadingSS(true);
     setErrorSS(null);
 
-    apiv2.get('/admin/studentScores')
+    apiv2.get(`/admin/studentScores${buildCourseQuery(selectedCourse)}`)
       .then(res => setStudentScores(res.data.students))
       .catch(err => setErrorSS(err.message || 'Failed to load student scores'))
       .finally(() => setLoadingSS(false));
-  }, [tab]);
+  }, [tab, selectedCourse, courses]);
+
+  useEffect(() => {
+    setSelected(null);
+    setStats(null);
+    setDistribution(null);
+    setScoreSelected([]);
+    setStudentsByScore([]);
+  }, [selectedCourse]);
 
   // Flattened assignment list (for columns)
   const allAssignments = useMemo(() => assignments, [assignments]);
@@ -1134,6 +1195,8 @@ export default function Admin() {
           }}
           studentEmail={selectedStudent?.email}
           studentName={selectedStudent?.name}
+          selectedCourse={selectedCourse}
+          courses={courses}
         />
 
     </Box>

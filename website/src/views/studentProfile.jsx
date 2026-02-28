@@ -34,7 +34,27 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [studentData, setStudentData] = useState(null);
+  const [courses, setCourses] = useState([]);
   const [adminSelectedStudent, setAdminSelectedStudent] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState(localStorage.getItem('selectedCourseId') || '');
+
+  const resolveCourseQueryId = (courseId) => {
+    if (!courseId) return '';
+    const matchedCourse = courses.find((course) => course.id === courseId);
+    return matchedCourse?.gradescope_course_id || courseId;
+  };
+
+  useEffect(() => {
+    const handleSelectedCourseChanged = (event) => {
+      const nextCourse = event?.detail?.courseId || localStorage.getItem('selectedCourseId') || '';
+      setSelectedCourse(nextCourse);
+    };
+
+    window.addEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+    return () => {
+      window.removeEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+    };
+  }, []);
 
   // Check if user is admin and load student list
   useEffect(() => {
@@ -47,27 +67,21 @@ export default function StudentProfile() {
           
           // If admin, load student list
           if (adminStatus) {
-            setLoadingStudents(true);
-            apiv2.get('/students').then((studentsRes) => {
-              if (mounted) {
-                const studentsList = studentsRes.data.students.map(s => ({
-                  name: s[0],
-                  email: s[1]
-                })).sort((a, b) => a.name.localeCompare(b.name));
-                
-                setStudents(studentsList);
-                setLoadingStudents(false);
-                
-                // If no student selected, select first one
-                if (!selectedStudent && studentsList.length > 0) {
-                  setSelectedStudent(studentsList[0].email);
-                  setAdminSelectedStudent(studentsList[0].email);
-                }
-              }
-            }).catch(err => {
-              console.error('Failed to load students:', err);
-              if (mounted) setLoadingStudents(false);
-            });
+            apiv2.get('/admin/sync')
+              .then((coursesRes) => {
+                if (!mounted) return;
+                const fetchedCourses = coursesRes?.data?.courses || [];
+                setCourses(fetchedCourses);
+
+                if (fetchedCourses.length === 0) return;
+                const hasSelected = fetchedCourses.some((course) => course.id === selectedCourse);
+                const nextCourse = hasSelected ? selectedCourse : fetchedCourses[0].id;
+                setSelectedCourse(nextCourse);
+                localStorage.setItem('selectedCourseId', nextCourse);
+              })
+              .catch((err) => {
+                console.error('Failed to load courses:', err);
+              });
           }
           
           // Check if admin needs to select a student
@@ -83,6 +97,47 @@ export default function StudentProfile() {
       });
     return () => { mounted = false; };
   }, [selectedStudent, setSelectedStudent]);
+
+  useEffect(() => {
+    if (!isAdmin || !selectedCourse) {
+      return;
+    }
+
+    let mounted = true;
+    setLoadingStudents(true);
+    const queryCourseId = resolveCourseQueryId(selectedCourse);
+
+    apiv2.get(`/students?course_id=${encodeURIComponent(queryCourseId)}`)
+      .then((studentsRes) => {
+        if (!mounted) return;
+
+        const studentsList = (studentsRes?.data?.students || [])
+          .map(s => ({
+            name: s[0],
+            email: s[1]
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setStudents(studentsList);
+
+        const stillExists = studentsList.some((student) => student.email === adminSelectedStudent);
+        if (!stillExists) {
+          const nextEmail = studentsList[0]?.email || '';
+          setAdminSelectedStudent(nextEmail);
+          setSelectedStudent(nextEmail);
+        }
+
+        setLoadingStudents(false);
+      })
+      .catch((err) => {
+        console.error('Failed to load students:', err);
+        if (mounted) setLoadingStudents(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isAdmin, selectedCourse, adminSelectedStudent, setSelectedStudent, courses]);
 
   const fetchEmail = useMemo(() => {
     if (isAdmin) {
@@ -106,13 +161,20 @@ export default function StudentProfile() {
       return;
     }
 
+    if (isAdmin && !selectedCourse) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    const queryCourseId = resolveCourseQueryId(selectedCourse);
     
+    const courseQuery = queryCourseId ? `?course_id=${encodeURIComponent(queryCourseId)}` : '';
+
     // Fetch both student grades and class category averages
     Promise.all([
-      apiv2.get(`/students/${encodeURIComponent(fetchEmail)}/grades?format=db`),
-      apiv2.get('/students/category-stats')
+      apiv2.get(`/students/${encodeURIComponent(fetchEmail)}/grades?format=db${queryCourseId ? `&course_id=${encodeURIComponent(queryCourseId)}` : ''}`),
+      apiv2.get(`/students/category-stats${courseQuery}`)
     ])
       .then(([gradesRes, statsRes]) => {
         const data = gradesRes.data;
@@ -128,7 +190,7 @@ export default function StudentProfile() {
         setStudentData(null);
         setLoading(false);
       });
-  }, [fetchEmail, studentName]);
+  }, [fetchEmail, studentName, selectedCourse, isAdmin, courses]);
 
   const handleAdminStudentChange = (event) => {
     const newEmail = event.target.value;
@@ -167,21 +229,23 @@ export default function StudentProfile() {
           
           {/* Admin Student Selector */}
           {isAdmin && (
-            <FormControl sx={{ minWidth: 200 }} size="small">
-              <InputLabel>Select Student</InputLabel>
-              <Select
-                value={adminSelectedStudent}
-                label="Select Student"
-                onChange={handleAdminStudentChange}
-                disabled={loadingStudents}
-              >
-                {students.map((student) => (
-                  <MenuItem key={student.email} value={student.email}>
-                    {student.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <FormControl sx={{ minWidth: 240 }} size="small">
+                <InputLabel>Select Student</InputLabel>
+                <Select
+                  value={adminSelectedStudent}
+                  label="Select Student"
+                  onChange={handleAdminStudentChange}
+                  disabled={loadingStudents}
+                >
+                  {students.map((student) => (
+                    <MenuItem key={student.email} value={student.email}>
+                      {student.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
           )}
         </Box>
       </Paper>

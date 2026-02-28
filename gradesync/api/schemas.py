@@ -20,6 +20,11 @@ from pydantic import BaseModel, Field
 class CourseInfo(BaseModel):
     """Course information model."""
     id: str = Field(..., description="Course identifier", example="cs10_fa25")
+    gradescope_course_id: Optional[str] = Field(
+        None,
+        description="Gradescope numeric course ID used for database filtering",
+        example="1232070"
+    )
     name: str = Field(..., description="Full course name", example="CS10: The Beauty and Joy of Computing")
     department: str = Field(..., description="Department code", example="COMPSCI")
     course_number: str = Field(..., description="Course number", example="10")

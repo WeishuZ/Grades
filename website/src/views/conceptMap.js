@@ -66,7 +66,11 @@ export default function ConceptMap({ embedded = false }) {
                     return;
                 }
                 setNeedsSelection(false);
-                const res = await apiv2.get(`/students/${encodeURIComponent(email)}/concept-structure`);
+                const selectedCourseId = localStorage.getItem('selectedCourseId');
+                const courseQuery = selectedCourseId
+                  ? `?course_id=${encodeURIComponent(selectedCourseId)}`
+                  : '';
+                const res = await apiv2.get(`/students/${encodeURIComponent(email)}/concept-structure${courseQuery}`);
                 if (!mounted) return;
                 setOutline(res.data);
             } catch (err) {
@@ -110,18 +114,40 @@ export default function ConceptMap({ embedded = false }) {
         );
     }
 
-  // ——— HARDCODED LEGEND VALUES ———
-  const studentLevels = [
-    { name: 'First Steps', color: '#dddddd' },
-    { name: 'Needs Practice', color: '#ADD8E6' },
-    { name: 'In Progress', color: '#89CFF0' },
-    { name: 'Almost There', color: '#6495ED' },
-    { name: 'Mastered', color: '#0F4D92' },
-  ];
-  const classLevels = [
-    { name: 'Not Taught', color: '#dddddd' },
-    { name: 'Taught', color: '#8fbc8f' },
-  ];
+  const studentLevels = Array.isArray(outline?.['student levels'])
+    ? outline['student levels'].map((level, index) => {
+        if (typeof level === 'string') {
+          const fallbackColors = ['#dddddd', '#ADD8E6', '#89CFF0', '#6495ED', '#0F4D92'];
+          return { name: level, color: fallbackColors[index] || '#0F4D92' };
+        }
+        return {
+          name: level?.name || `Level ${index + 1}`,
+          color: level?.color || '#0F4D92',
+        };
+      })
+    : [
+        { name: 'First Steps', color: '#dddddd' },
+        { name: 'Needs Practice', color: '#ADD8E6' },
+        { name: 'In Progress', color: '#89CFF0' },
+        { name: 'Almost There', color: '#6495ED' },
+        { name: 'Mastered', color: '#0F4D92' },
+      ];
+
+  const classLevels = Array.isArray(outline?.['class levels'])
+    ? outline['class levels'].map((level, index) => {
+        if (typeof level === 'string') {
+          const fallbackColors = ['#dddddd', '#8fbc8f'];
+          return { name: level, color: fallbackColors[index] || '#8fbc8f' };
+        }
+        return {
+          name: level?.name || `Class Level ${index + 1}`,
+          color: level?.color || '#8fbc8f',
+        };
+      })
+    : [
+        { name: 'Not Taught', color: '#dddddd' },
+        { name: 'Taught', color: '#8fbc8f' },
+      ];
 
   return (
     <>

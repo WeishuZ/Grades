@@ -10,14 +10,12 @@ services:
       - /var/www/certbot:/var/www/certbot:ro
     networks:
       - frontend
-      - concept_map_integration
     ports:
       - 80:80
       - 443:443
     depends_on:
       - web
       - api
-      - dtgui-progress-report
   web:
     container_name: gradeview-web
     image: ${CI_REGISTRY_IMAGE:-gradeview}/web:${WEB_VERSION:-development}
@@ -48,17 +46,6 @@ services:
       - db
     command: npm start
     restart: unless-stopped
-  dtgui-progress-report:
-    container_name: dtgui-progress-report
-    image: ${CI_REGISTRY_IMAGE:-dtgui}/progress-report:${PROGRESS_REPORT_VERSION:-development}
-    build: ./progressReport
-    environment:
-      - LISTEN_PORT=${PROGRESS_REPORT_PORT:-5000}
-    networks:
-      - concept_map_integration
-    ports:
-      - 8080:${PROGRESS_REPORT_PORT}
-    restart: unless-stopped
   redis:
     image: redis:latest
     networks:
@@ -84,7 +71,5 @@ services:
 networks:
   frontend:
     name: frontend
-  concept_map_integration:
-    name: concept_map_integration
   db:
     name: db

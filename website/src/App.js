@@ -16,7 +16,6 @@ import StudentProfile from './views/studentProfile';
 import Login from './views/login';
 import Buckets from './views/buckets';
 import HTTPError from './views/httpError';
-import ConceptMap from './views/conceptMap';
 import StudentSelectionWrapper from "./components/StudentSelectionWrapper";
 import Admin from './views/admin';
 import Alerts from './views/alerts';

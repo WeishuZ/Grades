@@ -2,8 +2,6 @@ import { Router } from 'express';
 import RateLimit from 'express-rate-limit';
 import GradesRouter from './grades/index.js';
 import ProjectionsRouter from './projections/index.js';
-import ProgressQueryStringRouter from './progressquerystring/index.js';
-import MasteryMappingRouter from './masterymapping/index.js';
 import ConceptStructureRouter from './concept-structure/index.js';
 import CategoryStatsRouter from './category-stats/index.js';
 import { validateAdminOrStudentMiddleware } from '../../../lib/authlib.mjs';
@@ -40,8 +38,6 @@ router.use('/:email', validateAdminOrStudentMiddleware);
 
 router.use('/:email/grades', GradesRouter);
 router.use('/:email/projections', ProjectionsRouter);
-router.use('/:email/progressquerystring', ProgressQueryStringRouter);
-router.use('/:email/masterymapping', MasteryMappingRouter);
 router.use('/:email/concept-structure', ConceptStructureRouter);
 
 router.get('/', validateAdminMiddleware, async (req, res) => {

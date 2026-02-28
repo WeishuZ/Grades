@@ -17,6 +17,11 @@ router.get('/', async (req, res) => {
     try {
         const { course_id: courseId } = req.query;
         const pool = getPool();
+        const naturalCollator = new Intl.Collator('en', {
+            numeric: true,
+            sensitivity: 'base',
+            ignorePunctuation: true,
+        });
         let query = `
             SELECT 
                 COALESCE(a.category, 'Uncategorized') as category,
@@ -32,14 +37,23 @@ router.get('/', async (req, res) => {
             query += ` AND (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
             params.push(courseId);
         }
-
-        query += ` ORDER BY a.category, a.title`;
         
         const result = await pool.query(query, params);
+
+        const sortedRows = [...result.rows].sort((a, b) => {
+            const categoryA = (a.category || '').trim();
+            const categoryB = (b.category || '').trim();
+            const categoryCmp = naturalCollator.compare(categoryA, categoryB);
+            if (categoryCmp !== 0) return categoryCmp;
+
+            const nameA = (a.assignment_name || '').trim();
+            const nameB = (b.assignment_name || '').trim();
+            return naturalCollator.compare(nameA, nameB);
+        });
         
         // Group by category
         const grouped = {};
-        result.rows.forEach(row => {
+        sortedRows.forEach(row => {
             const category = row.category.trim();
             const name = row.assignment_name.trim();
             const maxPoints = parseFloat(row.max_points) || 0;

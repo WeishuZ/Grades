@@ -14,7 +14,7 @@ import {
   Alert
 } from '@mui/material';
 import apiv2 from '../utils/apiv2';
-import { processStudentData, getGradeLevel } from '../utils/studentDataProcessor';
+import { processStudentData } from '../utils/studentDataProcessor';
 import StudentProfileContent from '../components/StudentProfileContent';
 import { StudentSelectionContext } from "../components/StudentSelectionWrapper";
 import Buckets from './buckets';
@@ -64,25 +64,28 @@ export default function StudentProfile() {
         if (mounted) {
           const adminStatus = res?.data?.isAdmin === true;
           setIsAdmin(adminStatus);
-          
-          // If admin, load student list
-          if (adminStatus) {
-            apiv2.get('/admin/sync')
-              .then((coursesRes) => {
-                if (!mounted) return;
-                const fetchedCourses = coursesRes?.data?.courses || [];
-                setCourses(fetchedCourses);
 
-                if (fetchedCourses.length === 0) return;
-                const hasSelected = fetchedCourses.some((course) => course.id === selectedCourse);
-                const nextCourse = hasSelected ? selectedCourse : fetchedCourses[0].id;
-                setSelectedCourse(nextCourse);
-                localStorage.setItem('selectedCourseId', nextCourse);
-              })
-              .catch((err) => {
-                console.error('Failed to load courses:', err);
-              });
-          }
+          const coursesEndpoint = adminStatus ? '/admin/sync' : '/students/courses';
+          apiv2.get(coursesEndpoint)
+            .then((coursesRes) => {
+              if (!mounted) return;
+              const fetchedCourses = coursesRes?.data?.courses || [];
+              setCourses(fetchedCourses);
+
+              if (fetchedCourses.length === 0) {
+                setSelectedCourse('');
+                localStorage.removeItem('selectedCourseId');
+                return;
+              }
+
+              const hasSelected = fetchedCourses.some((course) => String(course.id) === String(selectedCourse));
+              const nextCourse = hasSelected ? selectedCourse : String(fetchedCourses[0].id);
+              setSelectedCourse(nextCourse);
+              localStorage.setItem('selectedCourseId', nextCourse);
+            })
+            .catch((err) => {
+              console.error('Failed to load courses:', err);
+            });
           
           // Check if admin needs to select a student
           if (adminStatus && !selectedStudent && !localStorage.getItem('email')) {
@@ -285,7 +288,6 @@ export default function StudentProfile() {
       {tab === 0 && studentData && (
         <StudentProfileContent 
           studentData={studentData}
-          getGradeLevel={getGradeLevel}
         />
       )}
 

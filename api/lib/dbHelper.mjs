@@ -222,6 +222,65 @@ export async function studentExistsInDb(email) {
 }
 
 /**
+ * Gets courses a student is enrolled in, based on students table membership.
+ * @param {string} email - The student's email
+ * @returns {Promise<Array<{id:number,name:string,gradescope_course_id:string,department:string,course_number:string,semester:string,year:number}>>}
+ */
+export async function getStudentCourses(email) {
+    const pool = getPool();
+
+    const query = `
+        SELECT DISTINCT
+            c.id,
+            c.name,
+            c.gradescope_course_id,
+            c.department,
+            c.course_number,
+            c.semester,
+            c.year
+        FROM students st
+        JOIN courses c ON st.course_id = c.id
+        WHERE st.email = $1
+        ORDER BY c.year DESC, c.semester, c.department, c.course_number, c.name
+    `;
+
+    try {
+        const result = await pool.query(query, [email]);
+        return result.rows;
+    } catch (err) {
+        console.error('Error fetching student courses:', err);
+        throw err;
+    }
+}
+
+/**
+ * Checks whether a student is enrolled in a given course.
+ * @param {string} email - Student email
+ * @param {string|number} courseId - Internal course id or gradescope course id
+ * @returns {Promise<boolean>}
+ */
+export async function studentEnrolledInCourse(email, courseId) {
+    const pool = getPool();
+
+    const query = `
+        SELECT 1
+        FROM students st
+        JOIN courses c ON st.course_id = c.id
+        WHERE st.email = $1
+          AND (c.id::text = $2 OR c.gradescope_course_id::text = $2)
+        LIMIT 1
+    `;
+
+    try {
+        const result = await pool.query(query, [email, String(courseId)]);
+        return result.rows.length > 0;
+    } catch (err) {
+        console.error('Error checking student course enrollment:', err);
+        throw err;
+    }
+}
+
+/**
  * Gets score distribution for a specific assignment across all students
  * Optimized with JOIN to fetch all data in one query
  * @param {string} assignmentName - The assignment title

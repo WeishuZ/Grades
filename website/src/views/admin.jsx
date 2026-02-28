@@ -556,10 +556,6 @@ export default function Admin() {
                 <strong>Section:</strong> {selected.section}
                 </Typography>
                 <Typography>
-                <strong>Average:</strong>{' '}
-                {stats.average?.toFixed(2) ?? 'N/A'}
-                </Typography>
-                <Typography>
                 <strong>Max:</strong> {stats.max ?? 'N/A'}
                 </Typography>
                 <Typography>

@@ -1,5 +1,6 @@
 import config from 'config';
 import { getStudent } from './redisHelper.mjs';
+import { studentExistsInDb } from './dbHelper.mjs';
 
 /**
  * Checks if the specified user is an admin.
@@ -22,11 +23,10 @@ export async function isStudent(email) {
         const student = await getStudent(email);
         return !!student;
     } catch (err) {
-        switch (typeof err) {
-            case 'StudentNotEnrolledError':
-                return false;
-            default:
-                throw err;
+        if (err?.name === 'StudentNotEnrolledError' || err?.name === 'KeyNotFoundError') {
+            return await studentExistsInDb(email);
         }
+
+        throw err;
     }
 }

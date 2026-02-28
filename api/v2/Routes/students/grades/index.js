@@ -7,25 +7,46 @@ import { isAdmin } from '../../../../lib/userlib.mjs';
 import {
     getStudentSubmissionsByTime,
     getStudentSubmissionsGrouped,
+    getStudentCourses,
+    studentEnrolledInCourse,
     studentExistsInDb,
 } from '../../../../lib/dbHelper.mjs';
+import { getEmailFromAuth } from '../../../../lib/googleAuthHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
-    const { id } = req.params; // the id is the student's email
+    const { email } = req.params;
     const { sort, format, course_id: courseId } = req.query; // sort: 'time' or 'assignment' (default), format: 'list' or 'grouped'
     
     try {
+        const authEmail = await getEmailFromAuth(req.headers['authorization']);
+        const requesterIsAdmin = isAdmin(authEmail);
+
+        if (!requesterIsAdmin && authEmail !== email) {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+
+        if (courseId && !requesterIsAdmin) {
+            const enrolled = await studentEnrolledInCourse(email, courseId);
+            if (!enrolled) {
+                return res.status(403).json({ message: 'Access denied for requested course.' });
+            }
+        }
+
+        if (!courseId && !requesterIsAdmin) {
+            const studentCourses = await getStudentCourses(email);
+            if (studentCourses.length > 0) {
+                const defaultCourseId = studentCourses[0].gradescope_course_id || studentCourses[0].id;
+                req.query.course_id = String(defaultCourseId);
+            }
+        }
+
+        const effectiveCourseId = req.query.course_id || courseId || null;
+
         // Handle time-based sorting from PostgreSQL
         if (sort === 'time') {
-            if (isAdmin(id)) {
-                return res.status(400).json({ 
-                    message: "Time-based sorting not available for admin view." 
-                });
-            }
-            
-            const submissionsByTime = await getStudentSubmissionsByTime(id, courseId || null);
+            const submissionsByTime = await getStudentSubmissionsByTime(email, effectiveCourseId);
             
             if (!submissionsByTime || submissionsByTime.length === 0) {
                 return res.status(200).json([]);
@@ -40,23 +61,17 @@ router.get('/', async (req, res) => {
         
         // Handle grouped format from PostgreSQL (similar to Redis structure)
         if (format === 'db') {
-            if (isAdmin(id)) {
-                return res.status(400).json({ 
-                    message: "Database format not available for admin view." 
-                });
-            }
-            
-            const dbExists = await studentExistsInDb(id);
+            const dbExists = await studentExistsInDb(email);
             if (!dbExists) {
                 // Fallback to Redis if student not in DB
-                const studentScores = await getStudentScores(id);
+                const studentScores = await getStudentScores(email);
                 const maxScores = await getMaxScores();
                 return res.status(200).json(
                     getStudentScoresWithMaxPoints(studentScores, maxScores)
                 );
             }
             
-            const groupedSubmissions = await getStudentSubmissionsGrouped(id, courseId || null);
+            const groupedSubmissions = await getStudentSubmissionsGrouped(email, effectiveCourseId);
             const maxScores = await getMaxScores();
             
             // Merge max scores from Redis with DB scores that may have submission times
@@ -66,34 +81,25 @@ router.get('/', async (req, res) => {
         }
         
         // Default: Try Redis first, fallback to PostgreSQL if no data
-        let studentScores;
-        let maxScores;
-        
-        if (isAdmin(id)) {
-            maxScores = await getMaxScores();
-            studentScores = maxScores;
-        } else {
-            // Attempt to get student scores from Redis
-            studentScores = await getStudentScores(id);
-            maxScores = await getMaxScores();
-        }
+        const studentScores = await getStudentScores(email);
+        const maxScores = await getMaxScores();
         
         // Check if Redis returned empty data
         const hasStudentData = studentScores && Object.keys(studentScores).length > 0;
         const hasMaxScores = maxScores && Object.keys(maxScores).length > 0;
         
-        if (courseId && !isAdmin(id)) {
-            const groupedSubmissions = await getStudentSubmissionsGrouped(id, courseId);
+        if (effectiveCourseId && !requesterIsAdmin) {
+            const groupedSubmissions = await getStudentSubmissionsGrouped(email, effectiveCourseId);
             return res.status(200).json(groupedSubmissions || {});
         }
 
-        if (!hasStudentData && !isAdmin(id)) {
+        if (!hasStudentData) {
             // Redis has no data, try PostgreSQL fallback
-            console.log(`Redis data not found for ${id}, using database fallback`);
+            console.log(`Redis data not found for ${email}, using database fallback`);
             
-            const dbExists = await studentExistsInDb(id);
+            const dbExists = await studentExistsInDb(email);
             if (dbExists) {
-                const groupedSubmissions = await getStudentSubmissionsGrouped(id);
+                const groupedSubmissions = await getStudentSubmissionsGrouped(email, effectiveCourseId);
                 return res.status(200).json(groupedSubmissions);
             } else {
                 return res.status(200).json({});
@@ -105,7 +111,7 @@ router.get('/', async (req, res) => {
             getStudentScoresWithMaxPoints(studentScores, maxScores)
         );
     } catch (err) {
-        console.error("Internal service error for student with id %s", id, err);
+        console.error("Internal service error for student with email %s", email, err);
         return res.status(500).json({ message: "Internal server error." });
     }
 });

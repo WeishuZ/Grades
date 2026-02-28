@@ -7,6 +7,7 @@ import '@fontsource/roboto/700.css';
 import './css/app.css';
 import { Route, BrowserRouter, Routes, Navigate } from 'react-router-dom';
 import PrivateRoutes from './components/privateRoutes';
+import AdminRoutes from './components/AdminRoutes';
 import NavBar from './components/NavBar';
 import Footer from './components/Footer';
 import Home from './views/home';
@@ -56,10 +57,12 @@ export default function App() {
 								<Route element={<PrivateRoutes />}>
 									<Route exact path='/' element={<Dashboard />} />
 									<Route exact path='/profile' element={<StudentProfile />} />
-									<Route exact path='/admin' element={<Admin />} />
-									<Route exact path='/gradesync' element={<GradeSyncControl />} />
-									<Route exact path='/alerts' element={<Alerts />} />
-									<Route exact path='/settings' element={<Settings />} />
+									<Route element={<AdminRoutes />}>
+										<Route exact path='/admin' element={<Admin />} />
+										<Route exact path='/gradesync' element={<GradeSyncControl />} />
+										<Route exact path='/alerts' element={<Alerts />} />
+										<Route exact path='/settings' element={<Settings />} />
+									</Route>
 								</Route>
 								<Route exact path='/serverError' element={<HTTPError errorCode={500} />} />
 								<Route exact path='/clientError' element={<HTTPError errorCode={400} />} />

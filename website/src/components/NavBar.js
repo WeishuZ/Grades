@@ -119,6 +119,11 @@ export default function ButtonAppBar() {
     );
     useEffect(() => {
         let mounted = true;
+        if (!loggedIn) {
+            setCourses([]);
+            return () => (mounted = false);
+        }
+
         if (isAdmin) {
             apiv2.get('/students').then((res) => {
                 if (mounted) {
@@ -130,31 +135,43 @@ export default function ButtonAppBar() {
                     }
                 }
             });
-
-            apiv2.get('/admin/sync')
-                .then((res) => {
-                    if (!mounted) return;
-
-                    const fetchedCourses = res?.data?.courses || [];
-                    setCourses(fetchedCourses);
-
-                    if (fetchedCourses.length === 0) return;
-
-                    const hasSelected = fetchedCourses.some((course) => course.id === selectedCourse);
-                    const nextCourse = hasSelected ? selectedCourse : fetchedCourses[0].id;
-
-                    setSelectedCourse(nextCourse);
-                    localStorage.setItem('selectedCourseId', nextCourse);
-                    window.dispatchEvent(new CustomEvent('selectedCourseChanged', {
-                        detail: { courseId: nextCourse },
-                    }));
-                })
-                .catch((err) => {
-                    console.error('Failed to load courses in navbar:', err);
-                });
         }
+
+        const coursesEndpoint = isAdmin ? '/admin/sync' : '/students/courses';
+        apiv2.get(coursesEndpoint)
+            .then((res) => {
+                if (!mounted) return;
+
+                const fetchedCourses = res?.data?.courses || [];
+                setCourses(fetchedCourses);
+
+                if (fetchedCourses.length === 0) {
+                    setSelectedCourse('');
+                    localStorage.removeItem('selectedCourseId');
+                    window.dispatchEvent(new CustomEvent('selectedCourseChanged', {
+                        detail: { courseId: '' },
+                    }));
+                    return;
+                }
+
+                const hasSelected = fetchedCourses.some((course) => String(course.id) === String(selectedCourse));
+                const nextCourse = hasSelected ? selectedCourse : String(fetchedCourses[0].id);
+
+                setSelectedCourse(nextCourse);
+                localStorage.setItem('selectedCourseId', nextCourse);
+                window.dispatchEvent(new CustomEvent('selectedCourseChanged', {
+                    detail: { courseId: nextCourse },
+                }));
+            })
+            .catch((err) => {
+                console.error('Failed to load courses in navbar:', err);
+                if (mounted) {
+                    setCourses([]);
+                }
+            });
+
         return () => (mounted = false);
-    }, [isAdmin, selectedCourse, setSelectedStudent]);
+    }, [isAdmin, loggedIn, selectedCourse, setSelectedStudent]);
 
     useEffect(() => {
         let mounted = true;
@@ -212,7 +229,7 @@ export default function ButtonAppBar() {
                     </Box>
                     {loggedIn ? (
                         <>
-                            {isAdmin && courses.length > 0 && (
+                            {courses.length > 0 && (
                                 <FormControl
                                     size='small'
                                     sx={{

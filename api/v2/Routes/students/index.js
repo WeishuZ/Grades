@@ -8,8 +8,9 @@ import ConceptStructureRouter from './concept-structure/index.js';
 import CategoryStatsRouter from './category-stats/index.js';
 import { validateAdminOrStudentMiddleware } from '../../../lib/authlib.mjs';
 import { validateAdminMiddleware } from '../../../lib/authlib.mjs';
+import { getEmailFromAuth } from '../../../lib/googleAuthHelper.mjs';
 import { getStudents } from '../../../lib/redisHelper.mjs';
-import { getStudentsByCourse } from '../../../lib/dbHelper.mjs';
+import { getStudentsByCourse, getStudentCourses } from '../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
@@ -21,18 +22,28 @@ router.use(
     }),
 );
 
-router.use('/category-stats', CategoryStatsRouter);
-router.use('/:id/grades', GradesRouter);
+// Current user's enrolled courses (students) or all courses (admins).
+router.get('/courses', validateAdminOrStudentMiddleware, async (req, res) => {
+    try {
+        const authEmail = await getEmailFromAuth(req.headers['authorization']);
+        const courses = await getStudentCourses(authEmail);
+        return res.status(200).json({ courses });
+    } catch (err) {
+        console.error('Error fetching current user courses:', err);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+router.use('/category-stats', validateAdminOrStudentMiddleware, CategoryStatsRouter);
+
+// Ensure a student can only access their own email-based resources.
+router.use('/:email', validateAdminOrStudentMiddleware);
+
+router.use('/:email/grades', GradesRouter);
 router.use('/:email/projections', ProjectionsRouter);
-router.use('/:id/progressquerystring', ProgressQueryStringRouter);
+router.use('/:email/progressquerystring', ProgressQueryStringRouter);
 router.use('/:email/masterymapping', MasteryMappingRouter);
 router.use('/:email/concept-structure', ConceptStructureRouter);
-
-// TODO: sanitize email input.
-// Ensure the requester has access to the requested student's data.
-// Temporarily disabled to debug routing issue
-
-router.use('/:email', validateAdminOrStudentMiddleware);
 
 router.get('/', validateAdminMiddleware, async (req, res) => {
     try {

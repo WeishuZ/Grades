@@ -11,7 +11,6 @@ import {
   TableContainer,
   Paper,
   Grid,
-  Chip,
   ToggleButtonGroup,
   ToggleButton,
 } from '@mui/material';
@@ -54,13 +53,44 @@ ChartJS.register(
  * Shared Student Profile Content Component
  * Used by both the dialog version and the page version
  */
-export default function StudentProfileContent({ studentData, getGradeLevel }) {
+export default function StudentProfileContent({ studentData }) {
   if (!studentData) return null;
+
+  const toSafePercentage = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(100, numeric));
+  };
+
+  const renderProgressBattery = (value, segmentCount = 10) => {
+    const safeValue = toSafePercentage(value);
+    const filledSegments = Math.round((safeValue / 100) * segmentCount);
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+          {Array.from({ length: segmentCount }, (_, index) => (
+            <Box
+              key={index}
+              sx={{
+                width: 10,
+                height: 16,
+                borderRadius: '2px',
+                backgroundColor: index < filledSegments ? '#1e3a8a' : '#e5e7eb',
+                border: '1px solid #d1d5db'
+              }}
+            />
+          ))}
+        </Box>
+        <Typography variant="body2" sx={{ color: '#374151', fontWeight: 600, minWidth: 58, textAlign: 'left' }}>
+          {safeValue.toFixed(2)}%
+        </Typography>
+      </Box>
+    );
+  };
 
   // Local state for sort mode (only affects line chart and detail table)
   const [sortMode, setSortMode] = useState('assignment');
-
-  const gradeLevel = getGradeLevel(studentData.overallPercentage);
 
   // Sort the trend data for line chart based on sortMode
   const sortedTrendData = useMemo(() => {
@@ -135,7 +165,7 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
           Overall Summary
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={4}>
             <Box textAlign="center" sx={{ p: 2 }}>
               <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem', mb: 1 }}>Total Score</Typography>
               <Typography variant="h4" sx={{ color: '#1e3a8a', fontWeight: 600, mb: 0.5 }}>
@@ -146,34 +176,13 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={4}>
             <Box textAlign="center" sx={{ p: 2 }}>
-              <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem', mb: 1 }}>Percentage</Typography>
-              <Typography variant="h4" sx={{ color: '#ea580c', fontWeight: 600 }}>
-                {studentData.overallPercentage.toFixed(2)}%
-              </Typography>
+              <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem', mb: 1 }}>Progress</Typography>
+              {renderProgressBattery(studentData.overallPercentage)}
             </Box>
           </Grid>
-          <Grid item xs={12} sm={3}>
-            <Box textAlign="center" sx={{ p: 2 }}>
-              <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem', mb: 1 }}>Grade</Typography>
-              <Chip 
-                label={gradeLevel.grade}
-                sx={{ 
-                  mt: 1,
-                  fontSize: '1.5rem',
-                  height: '56px',
-                  minWidth: '56px',
-                  backgroundColor: `${gradeLevel.color}20`,
-                  color: gradeLevel.color,
-                  fontWeight: 700,
-                  border: `2px solid ${gradeLevel.color}40`,
-                  borderRadius: '12px'
-                }}
-              />
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={4}>
             <Box textAlign="center" sx={{ p: 2 }}>
               <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem', mb: 1 }}>Total Assignments</Typography>
               <Typography variant="h4" sx={{ color: '#1e3a8a', fontWeight: 600 }}>
@@ -209,45 +218,18 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
                 <TableCell align="center"><strong>%</strong></TableCell>
                 <TableCell align="center"><strong>Count</strong></TableCell>
                 <TableCell align="center"><strong>Avg</strong></TableCell>
-                <TableCell align="center"><strong>Grade</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {Object.entries(studentData.categoriesData).map(([category, data]) => {
-                const gradeInfo = getGradeLevel(data.percentage);
                 return (
                   <TableRow key={category} hover>
                     <TableCell><strong>{category}</strong></TableCell>
                     <TableCell align="center">{Math.round(data.total)}</TableCell>
                     <TableCell align="center">{Math.round(data.maxPoints)}</TableCell>
-                    <TableCell align="center">
-                      <Chip 
-                        label={`${data.percentage.toFixed(2)}%`}
-                        size="small"
-                        sx={{ 
-                          backgroundColor: `${gradeInfo.color}20`,
-                          color: gradeInfo.color,
-                          fontWeight: 600,
-                          border: `1px solid ${gradeInfo.color}40`,
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </TableCell>
+                    <TableCell align="center">{renderProgressBattery(data.percentage)}</TableCell>
                     <TableCell align="center">{data.count}</TableCell>
                     <TableCell align="center">{data.average.toFixed(2)}</TableCell>
-                    <TableCell align="center">
-                      <Chip 
-                        label={gradeInfo.grade}
-                        size="small"
-                        sx={{ 
-                          backgroundColor: `${gradeInfo.color}20`,
-                          color: gradeInfo.color,
-                          fontWeight: 600,
-                          border: `1px solid ${gradeInfo.color}40`,
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -287,19 +269,6 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
                       pointRadius: 6,
                       pointHoverRadius: 10,
                       pointBackgroundColor: '#1565c0',
-                      pointBorderColor: '#fff',
-                      pointBorderWidth: 2,
-                    },
-                    {
-                      label: 'Average %',
-                      data: studentData.radarData.map(d => d.average),
-                      borderColor: '#ef6c00',
-                      backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                      borderWidth: 3,
-                      borderDash: [5, 5],
-                      pointRadius: 5,
-                      pointHoverRadius: 9,
-                      pointBackgroundColor: '#ef6c00',
                       pointBorderColor: '#fff',
                       pointBorderWidth: 2,
                     }
@@ -368,24 +337,7 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
                         label: function(context) {
                           const dataIndex = context.dataIndex;
                           const data = studentData.radarData[dataIndex];
-                          if (context.datasetIndex === 0) {
-                            return `Score: ${context.parsed.r.toFixed(1)}% (${Math.round(data.score)}/${Math.round(data.maxPoints)})`;
-                          } else {
-                            return `Average: ${context.parsed.r.toFixed(1)}%`;
-                          }
-                        },
-                        afterLabel: function(context) {
-                          if (context.datasetIndex === 0) {
-                            const dataIndex = context.dataIndex;
-                            const data = studentData.radarData[dataIndex];
-                            const diff = data.percentage - data.average;
-                            if (Math.abs(diff) > 0.5) {
-                              return diff > 0 
-                                ? `▲ ${diff.toFixed(1)}% above average` 
-                                : `▼ ${Math.abs(diff).toFixed(1)}% below average`;
-                            }
-                          }
-                          return '';
+                          return `Score: ${context.parsed.r.toFixed(1)}% (${Math.round(data.score)}/${Math.round(data.maxPoints)})`;
                         }
                       }
                     },
@@ -648,13 +600,11 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
                 <TableCell align="center" sx={{ backgroundColor: '#f9fafb', fontWeight: 600 }}>Score</TableCell>
                 <TableCell align="center" sx={{ backgroundColor: '#f9fafb', fontWeight: 600 }}>Max</TableCell>
                 <TableCell align="center" sx={{ backgroundColor: '#f9fafb', fontWeight: 600 }}>%</TableCell>
-                <TableCell align="center" sx={{ backgroundColor: '#f9fafb', fontWeight: 600 }}>Grade</TableCell>
                 <TableCell align="center" sx={{ backgroundColor: '#f9fafb', fontWeight: 600 }}>Submitted</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {sortedAssignments.map((assignment, idx) => {
-                const gradeInfo = getGradeLevel(assignment.percentage);
                 return (
                   <TableRow key={idx} hover>
                     <TableCell>{idx + 1}</TableCell>
@@ -662,32 +612,7 @@ export default function StudentProfileContent({ studentData, getGradeLevel }) {
                     <TableCell>{assignment.name}</TableCell>
                     <TableCell align="center">{Math.round(assignment.score)}</TableCell>
                     <TableCell align="center">{Math.round(assignment.maxPoints)}</TableCell>
-                    <TableCell align="center">
-                      <Chip 
-                        label={`${assignment.percentage.toFixed(2)}%`}
-                        size="small"
-                        sx={{ 
-                          backgroundColor: `${gradeInfo.color}20`,
-                          color: gradeInfo.color,
-                          fontWeight: 600,
-                          border: `1px solid ${gradeInfo.color}40`,
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip 
-                        label={gradeInfo.grade}
-                        size="small"
-                        sx={{ 
-                          backgroundColor: `${gradeInfo.color}20`,
-                          color: gradeInfo.color,
-                          fontWeight: 600,
-                          border: `1px solid ${gradeInfo.color}40`,
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </TableCell>
+                    <TableCell align="center">{renderProgressBattery(assignment.percentage)}</TableCell>
                     <TableCell align="center" sx={{ fontSize: '0.875rem' }}>
                       {formatDate(assignment.submissionTime)}
                       {assignment.lateness && assignment.lateness !== '00:00:00' && (

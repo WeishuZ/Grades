@@ -44,6 +44,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info("Starting the gradescope_to_spreadsheet script.")
 
+
+def natural_sort_key(value):
+    text = (value or "").strip().lower()
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", text)]
+
 # Load JSON variables
 class_json_name = 'courses.json'
 config_path = os.path.join(os.path.dirname(__file__), '..', 'config', class_json_name)
@@ -660,7 +665,10 @@ def populate_index_sheet(sheet_api_instance, assignment_id_to_names):
     
     # Get all current sheets to filter assignments
     is_not_optional = lambda assignment: not "optional" in assignment.lower()
-    assignment_names = sorted([name for name in assignment_id_to_names.values() if is_not_optional(name)])
+    assignment_names = sorted(
+        [name for name in assignment_id_to_names.values() if is_not_optional(name)],
+        key=natural_sort_key
+    )
     
     logger.info(f"Total assignments from Gradescope: {len(assignment_id_to_names)}")
     logger.info(f"Non-optional assignments: {len(assignment_names)}")
@@ -1374,29 +1382,17 @@ def populate_spreadsheet_gradebook(assignment_id_to_names, sheet_api_instance):
     postterms = set(filter(filter_postterms, assignment_names))
     new_postterms = postterms - set(preexisting_postterm_columns)
 
-    def extract_number_from_assignment_title(assignment):
-        """
-        Extracts a number from an assignment title
-
-        Args:
-            assignment (String) The assignment title
-
-        Returns:
-            None
-        """
-        numbers_present = re.findall("\d+", assignment)
-        if numbers_present:
-            return int(numbers_present[0])
-        return 0
+    def assignment_sort_key(assignment):
+        return natural_sort_key(assignment)
 
 
     # Sort all assignments and exams by number
-    sorted_new_labs = sorted(new_labs, key=extract_number_from_assignment_title)
-    sorted_new_discussions = sorted(new_discussions, key=extract_number_from_assignment_title)
-    sorted_new_projects = sorted(new_projects, key=extract_number_from_assignment_title)
-    sorted_new_lecture_quizzes = sorted(new_lecture_quizzes, key=extract_number_from_assignment_title)
-    sorted_new_midterms = sorted(new_midterms, key=extract_number_from_assignment_title)
-    sorted_new_postterms = sorted(new_postterms, key=extract_number_from_assignment_title)
+    sorted_new_labs = sorted(new_labs, key=assignment_sort_key)
+    sorted_new_discussions = sorted(new_discussions, key=assignment_sort_key)
+    sorted_new_projects = sorted(new_projects, key=assignment_sort_key)
+    sorted_new_lecture_quizzes = sorted(new_lecture_quizzes, key=assignment_sort_key)
+    sorted_new_midterms = sorted(new_midterms, key=assignment_sort_key)
+    sorted_new_postterms = sorted(new_postterms, key=assignment_sort_key)
 
     # The following formulas are used to retrieve grades from the gradebook.
     number_of_students = get_number_of_students()
@@ -1468,27 +1464,27 @@ def populate_spreadsheet_gradebook(assignment_id_to_names, sheet_api_instance):
     # Append the preexisting assignments and exams to the new, retrieved assignments and exams
     # and re-sort all of them numerically to ensure consistent ordering
     # This ensures that if an assignment is added later, it will still appear in the correct numerical position
-    def merge_and_sort_assignments(preexisting, new_assignments, extract_number_func):
+    def merge_and_sort_assignments(preexisting, new_assignments, sort_key_func):
         """
         Merges preexisting and new assignments and sorts them numerically.
         
         Args:
             preexisting (list): List of preexisting assignment names
             new_assignments (list): List of new assignment names
-            extract_number_func: Function to extract the number from assignment name
+            sort_key_func: Function to generate natural sort keys for assignment names
             
         Returns:
             list: Combined and numerically sorted list
         """
         all_assignments = set(preexisting) | set(new_assignments)
-        return sorted(list(all_assignments), key=extract_number_func)
+        return sorted(list(all_assignments), key=sort_key_func)
     
-    sorted_labs = merge_and_sort_assignments(preexisting_lab_columns, sorted_new_labs, extract_number_from_assignment_title)
-    sorted_discussions = merge_and_sort_assignments(preexisting_discussion_columns, sorted_new_discussions, extract_number_from_assignment_title)
-    sorted_projects = merge_and_sort_assignments(preexisting_project_columns, sorted_new_projects, extract_number_from_assignment_title)
-    sorted_lecture_quizzes = merge_and_sort_assignments(preexisting_lecture_quiz_columns, sorted_new_lecture_quizzes, extract_number_from_assignment_title)
-    sorted_midterms = merge_and_sort_assignments(preexisting_midterm_columns, sorted_new_midterms, extract_number_from_assignment_title)
-    sorted_postterms = merge_and_sort_assignments(preexisting_postterm_columns, sorted_new_postterms, extract_number_from_assignment_title)
+    sorted_labs = merge_and_sort_assignments(preexisting_lab_columns, sorted_new_labs, assignment_sort_key)
+    sorted_discussions = merge_and_sort_assignments(preexisting_discussion_columns, sorted_new_discussions, assignment_sort_key)
+    sorted_projects = merge_and_sort_assignments(preexisting_project_columns, sorted_new_projects, assignment_sort_key)
+    sorted_lecture_quizzes = merge_and_sort_assignments(preexisting_lecture_quiz_columns, sorted_new_lecture_quizzes, assignment_sort_key)
+    sorted_midterms = merge_and_sort_assignments(preexisting_midterm_columns, sorted_new_midterms, assignment_sort_key)
+    sorted_postterms = merge_and_sort_assignments(preexisting_postterm_columns, sorted_new_postterms, assignment_sort_key)
 
     logger.info(f"Sorted assignments - Labs: {len(sorted_labs)}, Discussions: {len(sorted_discussions)}, Projects: {len(sorted_projects)}")
     logger.info(f"Sorted assignments - Quizzes: {len(sorted_lecture_quizzes)}, Midterms: {len(sorted_midterms)}, Postterms: {len(sorted_postterms)}")

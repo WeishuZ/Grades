@@ -10,6 +10,13 @@ init:
 dev-up:
 	@docker compose -f docker-compose.dev.yml up -dV
 
+dev-web-refresh:
+	@echo "Rebuilding frontend assets (website/src -> website/server/build)..."
+	@cd website && npm run build
+	@echo "Restarting dev web container..."
+	@docker compose -f docker-compose.dev.yml restart web
+	@echo "Done. Hard refresh browser: Cmd+Shift+R"
+
 dev-down:
 	@docker compose -f docker-compose.dev.yml down
 

@@ -45,14 +45,16 @@ jobs:
               git fetch --all --prune
               git checkout main
               git reset --hard ${{ github.sha }}
-              # 停止并移除所有容器
-              sudo docker-compose -f docker-compose.yml down --remove-orphans || true
-              # 强制移除 frontend 网络（解决 active endpoints 问题）
-              sudo docker network rm frontend || true
-              # 清理无用容器
+              # Stop compose stack (do not fail deployment if cleanup hits stale resources)
+              sudo docker-compose -f docker-compose.yml down --remove-orphans --volumes || true
+              # Force-remove known containers to avoid name conflicts on re-create
+              sudo docker rm -f gradeview-api gradeview-web gradeview-gradesync gradeview-reverse-proxy grades_redis_1 2>/dev/null || true
+              # Remove stale networks if still present
+              sudo docker network rm frontend db 2>/dev/null || true
+              # Clean up dangling resources
               sudo docker container prune -f
-              # 重新启动服务
-              sudo docker-compose -f docker-compose.yml up -d --build
-              # 清理无用镜像
+              # Recreate services from latest commit
+              sudo docker-compose -f docker-compose.yml up -d --build --force-recreate --remove-orphans
+              # Clean up dangling images
               sudo docker image prune -f
             "

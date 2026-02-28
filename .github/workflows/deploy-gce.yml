@@ -45,6 +45,6 @@ jobs:
               git fetch --all --prune
               git checkout main
               git reset --hard ${{ github.sha }}
-              docker compose -f docker-compose.yml up -d --build --remove-orphans
+              docker-compose -f docker-compose.yml up -d --build --remove-orphans
               docker image prune -f
             "

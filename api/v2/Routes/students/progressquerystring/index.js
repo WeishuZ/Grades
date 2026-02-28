@@ -3,9 +3,9 @@
  */
 import { Router } from 'express';
 import {
-    getMaxScores,
-    getStudentScores,
-} from '../../../../lib/redisHelper.mjs';
+    getCourseAssignmentMatrix,
+    getStudentSubmissionsGrouped,
+} from '../../../../lib/dbHelper.mjs';
 import ProgressReportData from '../../../../assets/progressReport/CS10.json' with { type: 'json' };
 
 const router = Router({ mergeParams: true });
@@ -58,23 +58,17 @@ async function getMasteryString(userTopicPoints, maxTopicPoints) {
 
 router.get('/', async (req, res) => {
     const { email } = req.params;
+    const { course_id: courseId } = req.query;
     try {
-        const maxScores = await getMaxScores();
-        const studentScores = await getStudentScores(email);
+        const maxScores = await getCourseAssignmentMatrix(courseId || null);
+        const studentScores = await getStudentSubmissionsGrouped(email, courseId || null);
         const userTopicPoints = getTopicsFromUser(studentScores);
         const maxTopicPoints = getTopicsFromUser(maxScores);
         const masteryNum = await getMasteryString(userTopicPoints, maxTopicPoints);
         return res.status(200).json(masteryNum);
     } catch (err) {
-        switch (err.name) {
-            case 'StudentNotEnrolledError':
-            case 'KeyNotFoundError':
-                console.error('Error fetching student with email %s', email, err);
-                return res.status(404).json({ message: "Error fetching student."});
-            default:
-                console.error('Internal service error fetching student with email %s', email, err);
-                return res.status(500).json({ message: "Internal server error." });
-        }
+        console.error('Internal service error fetching student with email %s', email, err);
+        return res.status(500).json({ message: "Internal server error." });
     }
 });
 

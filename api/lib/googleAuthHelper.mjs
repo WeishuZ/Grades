@@ -4,10 +4,14 @@ import AuthorizationError from './errors/http/AuthorizationError.js';
 
 /**
  * Gets an email from a google auth token.
- * @param {string} token user token to retrieve email from.
+ * Accepts either an Express request object or a raw Authorization header value.
+ * @param {object|string} authInput req object or Authorization header/token string.
  * @returns {string} user's email.
  */
-export async function getEmailFromAuth(token) {
+export async function getEmailFromAuth(authInput) {
+
+    const token = extractAuthorizationToken(authInput);
+
     const googleOauthAudience = config.get('googleconfig.oauth.clientid');
     
     // Retry logic for handling Google key rotation
@@ -16,7 +20,7 @@ export async function getEmailFromAuth(token) {
         try {
             let oauthClient = new OAuth2Client(googleOauthAudience);
             const ticket = await oauthClient.verifyIdToken({
-                idToken: token.split(' ')[1],
+                idToken: token,
                 audience: googleOauthAudience,
             });
             const payload = ticket.getPayload();
@@ -40,6 +44,27 @@ export async function getEmailFromAuth(token) {
     throw new AuthorizationError(
         'Could not authenticate authorization token.',
     );
+}
+
+function extractAuthorizationToken(authInput) {
+    let headerValue = null;
+
+    if (typeof authInput === 'string') {
+        headerValue = authInput;
+    } else if (authInput && typeof authInput === 'object') {
+        headerValue = authInput?.headers?.authorization || authInput?.authorization || null;
+    }
+
+    if (!headerValue || typeof headerValue !== 'string') {
+        throw new AuthorizationError('no authorization token provided.');
+    }
+
+    const trimmed = headerValue.trim();
+    if (trimmed.toLowerCase().startsWith('bearer ')) {
+        return trimmed.slice(7).trim();
+    }
+
+    return trimmed;
 }
 
 /**

@@ -140,9 +140,8 @@ class ConfigService {
                         semester = COALESCE($4, semester),
                         year = COALESCE($5, year),
                         instructor = COALESCE($6, instructor),
-                        spreadsheet_id = COALESCE($7, spreadsheet_id),
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE id = $8
+                    WHERE id = $7
                 `, [
                     configData.course.name,
                     configData.course.department,
@@ -150,7 +149,6 @@ class ConfigService {
                     configData.course.semester,
                     configData.course.year,
                     configData.course.instructor,
-                    configData.course.spreadsheet_id,
                     courseId
                 ]);
             }
@@ -163,8 +161,8 @@ class ConfigService {
                         course_id, gradescope_enabled, gradescope_course_id, 
                         gradescope_sync_interval_hours, prairielearn_enabled, 
                         prairielearn_course_id, iclicker_enabled, iclicker_course_names,
-                        database_enabled, use_as_primary, spreadsheet_id, spreadsheet_scopes
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                        database_enabled, use_as_primary
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     ON CONFLICT (course_id) DO UPDATE SET
                         gradescope_enabled = EXCLUDED.gradescope_enabled,
                         gradescope_course_id = EXCLUDED.gradescope_course_id,
@@ -175,8 +173,6 @@ class ConfigService {
                         iclicker_course_names = EXCLUDED.iclicker_course_names,
                         database_enabled = EXCLUDED.database_enabled,
                         use_as_primary = EXCLUDED.use_as_primary,
-                        spreadsheet_id = EXCLUDED.spreadsheet_id,
-                        spreadsheet_scopes = EXCLUDED.spreadsheet_scopes,
                         updated_at = CURRENT_TIMESTAMP
                 `, [
                     courseId,
@@ -188,9 +184,7 @@ class ConfigService {
                     cfg.iclicker_enabled || false,
                     cfg.iclicker_course_names || [],
                     cfg.database_enabled ?? true,
-                    cfg.use_as_primary ?? true,
-                    cfg.spreadsheet_id,
-                    cfg.spreadsheet_scopes || ['https://www.googleapis.com/auth/spreadsheets']
+                    cfg.use_as_primary ?? true
                 ]);
             }
             
@@ -245,7 +239,6 @@ class ConfigService {
         
         const config = {
             redis: {},
-            spreadsheet: { pages: { gradepage: {}, binpage: {} } },
             googleconfig: { oauth: {} },
             admins: []
         };
@@ -255,12 +248,6 @@ class ConfigService {
             
             if (row.key.startsWith('redis_')) {
                 config.redis[row.key.replace('redis_', '')] = value;
-            } else if (row.key.startsWith('grade_page_')) {
-                config.spreadsheet.pages.gradepage[row.key.replace('grade_page_', '')] = value;
-            } else if (row.key.startsWith('bin_page_')) {
-                config.spreadsheet.pages.binpage[row.key.replace('bin_page_', '')] = value;
-            } else if (row.key === 'spreadsheet_id') {
-                config.spreadsheet.id = value;
             } else if (row.key === 'google_oauth_client_id') {
                 config.googleconfig.oauth.clientid = value;
             }
@@ -300,15 +287,7 @@ class ConfigService {
                 ['redis_host', config.redis?.host, 'string'],
                 ['redis_port', config.redis?.port, 'integer'],
                 ['redis_username', config.redis?.username, 'string'],
-                ['spreadsheet_id', config.spreadsheet?.id, 'string'],
-                ['google_oauth_client_id', config.googleconfig?.oauth?.clientid, 'string'],
-                ['grade_page_name', config.spreadsheet?.pages?.gradepage?.pagename, 'string'],
-                ['grade_page_meta_row', config.spreadsheet?.pages?.gradepage?.assignmentMetaRow, 'integer'],
-                ['grade_page_start_row', config.spreadsheet?.pages?.gradepage?.startrow, 'integer'],
-                ['grade_page_start_col', config.spreadsheet?.pages?.gradepage?.startcol, 'string'],
-                ['bin_page_name', config.spreadsheet?.pages?.binpage?.pagename, 'string'],
-                ['bin_page_start_cell', config.spreadsheet?.pages?.binpage?.startcell, 'string'],
-                ['bin_page_end_cell', config.spreadsheet?.pages?.binpage?.endcell, 'string']
+                ['google_oauth_client_id', config.googleconfig?.oauth?.clientid, 'string']
             ];
             
             for (const [key, value, valueType] of updates) {

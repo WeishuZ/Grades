@@ -8,35 +8,56 @@
       "semester": "Fall",
       "year": 2025,
       "instructor": "Dan Garcia",
-      
-      "gradescope": {
-        "enabled": true,
-        "course_id": "1098053",
-        "sync_interval_hours": 24
-      },
-      
-      "prairielearn": {
-        "enabled": false,
-        "course_id": "192475"
-      },
-      
-      "iclicker": {
-        "enabled": false,
-        "course_names": [
-          "[CS10 | Fa25] Discussion",
-          "[CS10 | Fa25] Lab",
-          "[CS10 | Fa25] Lecture"
-        ]
-      },
-      
-      "spreadsheet": {
-        "id": "130Vsasjjy8cc8MWqpyVy32mS9lqhvy0mhJyOhfTAmOo",
-        "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+      "sources": {
+        "gradescope": {
+          "enabled": true,
+          "course_id": "1098053",
+          "sync_interval_hours": 24
+        },
+        "prairielearn": {
+          "enabled": false,
+          "course_id": "192475"
+        },
+        "iclicker": {
+          "enabled": false,
+          "course_names": [
+            "[CS10 | Fa25] Discussion",
+            "[CS10 | Fa25] Lab",
+            "[CS10 | Fa25] Lecture"
+          ]
+        }
       },
       
       "database": {
         "enabled": true,
         "use_as_primary": true
+      },
+      "buckets": {
+        "grade_bins": [
+          { "grade": "A+", "range": "390-400" },
+          { "grade": "A", "range": "370-390" },
+          { "grade": "A-", "range": "360-370" },
+          { "grade": "B+", "range": "350-360" },
+          { "grade": "B", "range": "330-350" },
+          { "grade": "B-", "range": "320-330" },
+          { "grade": "C+", "range": "310-320" },
+          { "grade": "C", "range": "290-310" },
+          { "grade": "C-", "range": "280-290" },
+          { "grade": "D", "range": "240-280" },
+          { "grade": "F", "range": "0-240" }
+        ],
+        "grading_breakdown": [
+          { "assignment": "Quest", "points": 25 },
+          { "assignment": "Midterm", "points": 50 },
+          { "assignment": "Postterm", "points": 75 },
+          { "assignment": "Project 1: Wordle™-lite", "points": 15 },
+          { "assignment": "Project 2: Spelling-Bee", "points": 25 },
+          { "assignment": "Project 3: 2048", "points": 35 },
+          { "assignment": "Project 4: Explore", "points": 20 },
+          { "assignment": "Final Project", "points": 60 },
+          { "assignment": "Labs", "points": 80 },
+          { "assignment": "Attendance / Participation", "points": 15 }
+        ]
       },
       
       "assignment_categories": [
@@ -74,35 +95,56 @@
       "semester": "Spring",
       "year": 2026,
       "instructor": "Dan Garcia",
-      
-      "gradescope": {
-        "enabled": true,
-        "course_id": "1232070",
-        "sync_interval_hours": 24
-      },
-      
-      "prairielearn": {
-        "enabled": false,
-        "course_id": "192476"
-      },
-      
-      "iclicker": {
-        "enabled": false,
-        "course_names": [
-          "[CS10 | Sp26] Discussion",
-          "[CS10 | Sp26] Lab",
-          "[CS10 | Sp26] Lecture"
-        ]
-      },
-      
-      "spreadsheet": {
-        "id": "18-Sz8A62VZcPSxdBx4PV2REl6e7J-ks3ZyDctY9KQhc",
-        "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+      "sources": {
+        "gradescope": {
+          "enabled": true,
+          "course_id": "1232070",
+          "sync_interval_hours": 24
+        },
+        "prairielearn": {
+          "enabled": false,
+          "course_id": "192476"
+        },
+        "iclicker": {
+          "enabled": false,
+          "course_names": [
+            "[CS10 | Sp26] Discussion",
+            "[CS10 | Sp26] Lab",
+            "[CS10 | Sp26] Lecture"
+          ]
+        }
       },
       
       "database": {
         "enabled": true,
         "use_as_primary": false
+      },
+      "buckets": {
+        "grade_bins": [
+          { "grade": "A+", "range": "390-400" },
+          { "grade": "A", "range": "370-390" },
+          { "grade": "A-", "range": "360-370" },
+          { "grade": "B+", "range": "350-360" },
+          { "grade": "B", "range": "330-350" },
+          { "grade": "B-", "range": "320-330" },
+          { "grade": "C+", "range": "310-320" },
+          { "grade": "C", "range": "290-310" },
+          { "grade": "C-", "range": "280-290" },
+          { "grade": "D", "range": "240-280" },
+          { "grade": "F", "range": "0-240" }
+        ],
+        "grading_breakdown": [
+          { "assignment": "Quest", "points": 25 },
+          { "assignment": "Midterm", "points": 50 },
+          { "assignment": "Postterm", "points": 75 },
+          { "assignment": "Project 1: Wordle™-lite", "points": 15 },
+          { "assignment": "Project 2: Spelling-Bee", "points": 25 },
+          { "assignment": "Project 3: 2048", "points": 35 },
+          { "assignment": "Project 4: Explore", "points": 20 },
+          { "assignment": "Final Project", "points": 60 },
+          { "assignment": "Labs", "points": 80 },
+          { "assignment": "Attendance / Participation", "points": 15 }
+        ]
       },
       
       "assignment_categories": [
@@ -135,7 +177,6 @@
   ],
   
   "global_settings": {
-    "default_scopes": ["https://www.googleapis.com/auth/spreadsheets"],
     "csv_output_dir": "data/exports",
     "log_level": "INFO",
     "retry_attempts": 3,

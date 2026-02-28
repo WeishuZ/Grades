@@ -1,6 +1,9 @@
 import { Router } from 'express';
-import { getStudents, getStudentScores, getStudentsByAssignmentScore } from '../../../../lib/redisHelper.mjs'; 
-import { getAllStudentScores } from '../../../../lib/dbHelper.mjs';
+import {
+    getAllStudentScores,
+    getAssignmentDistribution,
+    getCategorySummaryDistribution,
+} from '../../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
@@ -14,7 +17,6 @@ router.get('/', async (req, res) => {
     const { course_id: courseId } = req.query;
     
     try {
-        // NEW: Single database query instead of 200+ Redis queries
         const students = await getAllStudentScores(courseId || null);
         
         const queryTime = Date.now() - startTime;
@@ -25,41 +27,12 @@ router.get('/', async (req, res) => {
             dataSource: 'database',
             queryTime: queryTime
         });
-    } catch (dbError) {
-        console.warn(`[PERF] Database query failed, falling back to Redis:`, dbError.message);
-        
-        // FALLBACK: Use original Redis logic
-        try {
-            const students = await getStudents();
-
-            const studentDataPromises = students.map(async (student) => {
-                const studentId = student[1]; 
-                const scores = await getStudentScores(studentId); 
-
-                return {
-                    name: student[0] || 'Unknown',
-                    email: student[1] || '',
-                    scores: scores || {}
-                };
-            });
-
-            const formattedStudents = await Promise.all(studentDataPromises);
-            
-            const fallbackTime = Date.now() - startTime;
-            console.log(`[PERF] Redis fallback completed in ${fallbackTime}ms`);
-
-            res.json({
-                students: formattedStudents,
-                dataSource: 'redis-fallback',
-                queryTime: fallbackTime
-            });
-        } catch (error) {
-            console.error('Error fetching student scores:', error);
-            res.status(500).json({ 
-                error: error.message || 'Failed to fetch student scores',
-                students: []
-            });
-        }
+    } catch (error) {
+        console.error('Error fetching student scores:', error);
+        res.status(500).json({ 
+            error: error.message || 'Failed to fetch student scores',
+            students: []
+        });
     }
 });
 
@@ -71,6 +44,7 @@ router.get('/', async (req, res) => {
  */
 router.get('/:section/:assignment/:score', async (req, res) => {
     const { section, assignment, score } = req.params;
+    const { course_id: courseId } = req.query;
     // Decode parameters
     const decodedSection = decodeURIComponent(section);
     const decodedAssignment = decodeURIComponent(assignment);
@@ -89,63 +63,24 @@ router.get('/:section/:assignment/:score', async (req, res) => {
     }
 
     try {
-        // Get distribution data which already has all students grouped by score
-        const students = await getStudents();
-        
-        // Check if this is a Summary request
+        let rows = [];
+
         if (decodedAssignment.includes('Summary')) {
-            // Get sum of all assignments in this section for each student
-            const matchingStudents = [];
-            
-            for (const student of students) {
-                const studentEmail = student[1];
-                const studentName = student[0];
-                const studentScores = await getStudentScores(studentEmail);
-
-                // Sum all scores in this section
-                let sectionTotal = 0;
-                if (studentScores[decodedSection]) {
-                    Object.values(studentScores[decodedSection]).forEach(score => {
-                        if (score != null && score !== '') {
-                            sectionTotal += parseInt(score) || 0;
-                        }
-                    });
-                }
-
-                // Check if this student's total falls within the score range
-                if (sectionTotal >= minScore && sectionTotal <= maxScore) {
-                    matchingStudents.push({
-                        name: studentName,
-                        email: studentEmail,
-                        score: sectionTotal
-                    });
-                }
-            }
-
-            return res.json({ students: matchingStudents });
+            rows = await getCategorySummaryDistribution(decodedSection, courseId || null);
+        } else {
+            rows = await getAssignmentDistribution(decodedAssignment, decodedSection, courseId || null);
         }
 
-        // Regular assignment score lookup - check range
-        const matchingStudents = [];
-
-        for (const student of students) {
-            const studentEmail = student[1];
-            const studentName = student[0];
-            const studentScores = await getStudentScores(studentEmail);
-            const studentScore = studentScores[decodedSection] ? studentScores[decodedSection][decodedAssignment] : null;
-
-            if (studentScore != null && studentScore !== '') {
-                const scoreVal = parseInt(studentScore) || 0;
-                // Check if score falls within the range
-                if (scoreVal >= minScore && scoreVal <= maxScore) {
-                    matchingStudents.push({
-                        name: studentName,
-                        email: studentEmail,
-                        score: scoreVal
-                    });
-                }
-            }
-        }
+        const matchingStudents = rows
+            .map((row) => {
+                const scoreVal = Number(row.score);
+                return {
+                    name: row.studentName,
+                    email: row.studentEmail,
+                    score: scoreVal
+                };
+            })
+            .filter((student) => !Number.isNaN(student.score) && student.score >= minScore && student.score <= maxScore);
 
         res.json({ students: matchingStudents });
     } catch (error) {

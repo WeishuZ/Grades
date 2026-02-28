@@ -94,7 +94,7 @@ def _categorize_assignment(assignment_name: str, course_categories: list = None)
 
 
 def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str, assignment_name: str, csv_filepath: str, 
-                                  spreadsheet_id: str = None, course_name: str = None, 
+                                  course_name: str = None, 
                                   department: str = None, course_number: str = None, 
                                   semester: str = None, year: str = None, instructor: str = None,
                                   course_categories: list = None):
@@ -105,7 +105,6 @@ def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str,
         assignment_id: Gradescope assignment id
         assignment_name: Assignment title
         csv_filepath: Path to saved CSV file (text/csv)
-        spreadsheet_id: Optional Google Sheets ID to store in course
         course_name: Optional course name
         department: Optional department code
         course_number: Optional course number
@@ -121,7 +120,6 @@ def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str,
         if not course:
             course = Course(
                 gradescope_course_id=course_gradescope_id,
-                spreadsheet_id=spreadsheet_id,
                 name=course_name,
                 department=department,
                 course_number=course_number,
@@ -134,9 +132,6 @@ def write_assignment_scores_to_db(course_gradescope_id: str, assignment_id: str,
         else:
             # Update course info if provided
             updated = False
-            if spreadsheet_id and course.spreadsheet_id != spreadsheet_id:
-                course.spreadsheet_id = spreadsheet_id
-                updated = True
             if course_name and course.name != course_name:
                 course.name = course_name
                 updated = True

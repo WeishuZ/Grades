@@ -33,7 +33,7 @@ export async function validateAdminOrStudentMiddleware(req, _, next) {
 export async function validateAdminMiddleware(req, _, next) {
     validateAuthenticatedRequestFormat(req);
 
-    const authEmail = await getEmailFromAuth(req.headers['authorization']);
+    const authEmail = await getEmailFromAuth(req);
     if (!isAdmin(authEmail)) {
         throw new UnauthorizedAccessError('not permitted');
     }
@@ -54,7 +54,7 @@ export async function validateStudentMiddleware(req, _, next) {
 
     const { email } = req.params;
 
-    const authEmail = await getEmailFromAuth(req.headers['authorization']);
+    const authEmail = await getEmailFromAuth(req);
     const studentExists = await isStudent(authEmail);
     if (!studentExists) {
         throw new AuthorizationError('You are not a registered student.');

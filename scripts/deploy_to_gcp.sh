@@ -81,11 +81,6 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=change_me_please
 POSTGRES_DB=gradesync
 
-# Google Service Account（必需）
-SERVICE_ACCOUNT_CREDENTIALS='{...}'
-GRADESYNC_SERVICE_ACCOUNT_CREDENTIALS='{...}'
-
-SPREADSHEET_ID=your_spreadsheet_id
 ENVFILE
 
 # 拉取最新的Docker镜像
@@ -170,9 +165,6 @@ echo "   cd /opt/gradeview && sudo nano .env"
 echo "   重点修改这些变量："
 echo "   - REDIS_DB_SECRET      (改为强密码)"
 echo "   - POSTGRES_PASSWORD    (改为强密码)"
-echo "   - SERVICE_ACCOUNT_CREDENTIALS     (Google服务账户JSON)"
-echo "   - GRADESYNC_SERVICE_ACCOUNT_CREDENTIALS (GradeSync的凭证)"
-echo "   - SPREADSHEET_ID       (你的Google Sheets ID)"
 echo "   - INSTANCE_CONNECTION_NAME 已自动填充为"
 echo "     eecs-gradeview:${REGION}:gradeview-db"
 echo ""

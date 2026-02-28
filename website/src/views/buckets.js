@@ -15,6 +15,7 @@ export default function Buckets({ embedded = false }) {
     const [gradingRows, setGradingRows] = useState([]);
     const [isAdmin, setIsAdmin] = useState(false);
     const [needsSelection, setNeedsSelection] = useState(false);
+    const [selectedCourse, setSelectedCourse] = useState(localStorage.getItem('selectedCourseId') || '');
 
     // Check if user is admin
     useEffect(() => {
@@ -37,9 +38,22 @@ export default function Buckets({ embedded = false }) {
     }, [selectedStudent]);
 
     useEffect(() => {
+        const handleSelectedCourseChanged = (event) => {
+            const nextCourse = event?.detail?.courseId || localStorage.getItem('selectedCourseId') || '';
+            setSelectedCourse(nextCourse);
+        };
+
+        window.addEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+        return () => {
+            window.removeEventListener('selectedCourseChanged', handleSelectedCourseChanged);
+        };
+    }, []);
+
+    useEffect(() => {
         let mounted = true;
         setLoadCount(i => i + 1);
-        apiv2.get('/bins').then((res) => {
+        const binsQuery = selectedCourse ? `?course_id=${encodeURIComponent(selectedCourse)}` : '';
+        apiv2.get(`/bins${binsQuery}`).then((res) => {
             if (mounted) {
                 console.log('Bins API response:', res.data);
                 console.log('Response type:', typeof res.data);
@@ -65,65 +79,34 @@ export default function Buckets({ embedded = false }) {
                 
                 console.log('Processed binsData:', binsData);
                 console.log('binsData length:', binsData ? binsData.length : 'null/undefined');
+
+                if (binsData && binsData.length > 0) {
+                    setBins(binsData);
+                } else {
+                    const fallbackBins = [
+                        { grade: 'A+', range: '390-400' },
+                        { grade: 'A', range: '370-390' },
+                        { grade: 'A-', range: '360-370' },
+                        { grade: 'B+', range: '350-360' },
+                        { grade: 'B', range: '330-350' },
+                        { grade: 'B-', range: '320-330' },
+                        { grade: 'C+', range: '310-320' },
+                        { grade: 'C', range: '290-310' },
+                        { grade: 'C-', range: '280-290' },
+                        { grade: 'D', range: '240-280' },
+                        { grade: 'F', range: '0-240' }
+                    ];
+                    setBins(fallbackBins);
+                }
                 
-                // Always use the standard bins format for display
-                // The database bins may be used for calculations, but we display the standard format
-                console.log('Using standard bins format for display');
-                const standardBins = [
-                    { grade: 'A+', range: '390-400' },
-                    { grade: 'A', range: '370-390' },
-                    { grade: 'A-', range: '360-370' },
-                    { grade: 'B+', range: '350-360' },
-                    { grade: 'B', range: '330-350' },
-                    { grade: 'B-', range: '320-330' },
-                    { grade: 'C+', range: '310-320' },
-                    { grade: 'C', range: '290-310' },
-                    { grade: 'C-', range: '280-290' },
-                    { grade: 'D', range: '240-280' },
-                    { grade: 'F', range: '0-240' }
-                ];
-                console.log('Setting standard bins:', standardBins);
-                setBins(standardBins);
-                
-                // Process grading breakdown from spreadsheet
+                // Process grading breakdown from backend config
                 const assignmentPoints = res.data.assignment_points || {};
                 if (Object.keys(assignmentPoints).length > 0) {
-                    // Check if we have individual labs (Lab0, Lab1, etc.)
-                    const labPattern = /^Lab\d+$/i; // Matches Lab0, Lab1, Lab2, etc.
-                    const hasIndividualLabs = Object.keys(assignmentPoints).some(key => labPattern.test(key));
-                    
-                    if (hasIndividualLabs) {
-                        // Calculate total labs points
-                        let labsTotal = 0;
-                        Object.entries(assignmentPoints).forEach(([assignment, points]) => {
-                            if (labPattern.test(assignment)) {
-                                labsTotal += Number(points) || 0;
-                            }
-                        });
-                        
-                        // Use standard format with calculated labs total
-                        console.log(`Individual labs detected (total: ${labsTotal}), using standard format`);
-                        const standardRows = [
-                            { assignment: 'Quest', points: 25 },
-                            { assignment: 'Midterm', points: 50 },
-                            { assignment: 'Postterm', points: 75 },
-                            { assignment: 'Project 1: Wordle™-lite', points: 15 },
-                            { assignment: 'Project 2: Spelling-Bee', points: 25 },
-                            { assignment: 'Project 3: 2048', points: 35 },
-                            { assignment: 'Project 4: Explore', points: 20 },
-                            { assignment: 'Final Project', points: 60 },
-                            { assignment: 'Labs', points: 80 },
-                            { assignment: 'Attendance / Participation', points: 15 }
-                        ];
-                        setGradingRows(standardRows);
-                    } else {
-                        // Use the data as-is if it's already in the correct format
-                        const breakdownRows = Object.entries(assignmentPoints)
-                            .map(([assignment, points]) => ({ assignment, points }));
-                        setGradingRows(breakdownRows);
-                    }
+                    const breakdownRows = Object.entries(assignmentPoints)
+                        .map(([assignment, points]) => ({ assignment, points }));
+                    setGradingRows(breakdownRows);
                 } else {
-                    // Fallback to hardcoded values if no data from spreadsheet
+                    // Fallback to hardcoded values if no data configured
                     const fallbackRows = [
                         { assignment: 'Quest', points: 25 },
                         { assignment: 'Midterm', points: 50 },
@@ -163,7 +146,7 @@ export default function Buckets({ embedded = false }) {
             setLoadCount(i => i - 1);
         });
         return () => mounted = false;
-    }, []);
+    }, [selectedCourse]);
 
     // Safety check: Ensure we always have bins after loading completes
     useEffect(() => {

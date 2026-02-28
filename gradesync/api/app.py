@@ -28,8 +28,6 @@ from dotenv import load_dotenv
 load_dotenv()  # Load .env file
 
 # Third-party integrations
-import gspread
-from google.oauth2.service_account import Credentials
 from backoff_utils import strategies
 from backoff_utils import backoff
 
@@ -54,15 +52,6 @@ from api.schemas import (
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Google Sheets API scopes
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-
-# Initialize Google Sheets client
-credentials_json = os.getenv("SERVICE_ACCOUNT_CREDENTIALS")
-credentials_dict = json.loads(credentials_json)
-credentials = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
-client = gspread.authorize(credentials)
 
 # Initialize FastAPI application with metadata
 app = FastAPI(
@@ -833,25 +822,6 @@ def fetchAllGrades(class_id: str = None):
         all_grades[title] = fetchGrades(class_id, one_id)
     return all_grades
 
-
-@handle_errors
-@app.post("/testWriteToSheet")
-async def write_to_sheet(request: WriteRequest):
-    """
-    Writes a value to a specified cell in a Google Sheet.
-    # NOTE: This function is only used for testing that Google Authentication works 
-    # NOTE: Remove this test function in a future version once more Sheets API endpoints are written.
-    """
-    try:
-        sheet = client.open_by_key(request.spreadsheet_id).worksheet(request.sheet_name)
-        sheet.update_acell(request.cell, request.value)
-        return JSONResponse(content={"message": f"Successfully wrote '{request.value}' to {request.cell}"}, status_code=200)
-    except Exception as e:
-        return JSONResponse(
-            content={"error": "Failed to write to cell", "message": str(e)},
-            status_code=500
-        )
-    
 
 @handle_errors
 @app.get("/getPLGrades")

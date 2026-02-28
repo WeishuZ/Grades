@@ -29,13 +29,20 @@ class CourseConfig:
         self.year = course_data.get("year")
         self.instructor = course_data.get("instructor")
         
-        # Module configurations
-        self.gradescope = course_data.get("gradescope", {})
-        self.prairielearn = course_data.get("prairielearn", {})
-        self.iclicker = course_data.get("iclicker", {})
-        self.spreadsheet = course_data.get("spreadsheet", {})
+        # Source configurations (supports both new `sources` shape and legacy top-level keys)
+        self.sources = course_data.get("sources", {})
+        self.gradescope = self._resolve_source("gradescope")
+        self.prairielearn = self._resolve_source("prairielearn")
+        self.iclicker = self._resolve_source("iclicker")
         self.database = course_data.get("database", {})
         self.assignment_categories = course_data.get("assignment_categories", [])
+
+    def _resolve_source(self, source_name: str) -> Dict[str, Any]:
+        source_config = self.sources.get(source_name, {})
+        if isinstance(source_config, dict) and source_config:
+            return source_config
+        legacy = self.data.get(source_name, {})
+        return legacy if isinstance(legacy, dict) else {}
     
     @property
     def gradescope_enabled(self) -> bool:
@@ -60,10 +67,6 @@ class CourseConfig:
     @property
     def iclicker_course_names(self) -> List[str]:
         return self.iclicker.get("course_names", [])
-    
-    @property
-    def spreadsheet_id(self) -> Optional[str]:
-        return self.spreadsheet.get("id")
     
     @property
     def database_enabled(self) -> bool:
@@ -105,6 +108,9 @@ class ConfigManager:
             # Load courses
             for course_data in self.config_data.get("courses", []):
                 course_config = CourseConfig(course_data)
+                if not course_config.id:
+                    logger.warning("Skipping course entry without id: %s", course_data)
+                    continue
                 self.courses[course_config.id] = course_config
             
             # Load global settings
@@ -189,14 +195,6 @@ class EnvConfig:
         if not username or not password:
             raise ValueError("ICLICKER_USERNAME and ICLICKER_PASSWORD must be set")
         return username, password
-    
-    @staticmethod
-    def get_service_account_credentials() -> str:
-        """Get Google Service Account credentials JSON."""
-        credentials = os.getenv("SERVICE_ACCOUNT_CREDENTIALS")
-        if not credentials:
-            raise ValueError("SERVICE_ACCOUNT_CREDENTIALS must be set")
-        return credentials
     
     @staticmethod
     def get_database_url() -> str:

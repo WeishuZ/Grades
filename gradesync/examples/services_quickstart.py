@@ -26,13 +26,12 @@ def example_gradescope():
     print("=" * 60)
     
     sync = GradescopeSync(
-        email=os.getenv("GRADESCOPE_EMAIL"),
-        password=os.getenv("GRADESCOPE_PASSWORD")
+        email=os.getenv("GRADESCOPE_EMAIL", ""),
+        password=os.getenv("GRADESCOPE_PASSWORD", "")
     )
     
     result = sync.sync_course(
         course_id="12345",
-        spreadsheet_id="your-spreadsheet-id",
         save_to_db=True
     )
     
@@ -50,8 +49,8 @@ def example_iclicker():
     print("=" * 60)
     
     sync = IClickerSync(
-        username=os.getenv("ICLICKER_USERNAME"),
-        password=os.getenv("ICLICKER_PASSWORD")
+        username=os.getenv("ICLICKER_USERNAME", ""),
+        password=os.getenv("ICLICKER_PASSWORD", "")
     )
     
     result = sync.sync_courses(
@@ -59,7 +58,7 @@ def example_iclicker():
             "[CS10 | Fa25] Lecture",
             "[CS10 | Fa25] Lab"
         ],
-        spreadsheet_id="your-spreadsheet-id"
+        save_to_db=True
     )
     
     print(f"✓ 同步了 {result['courses_synced']} 门课程")
@@ -77,12 +76,11 @@ def example_prairielearn():
     print("=" * 60)
     
     sync = PrairieLearnSync(
-        api_token=os.getenv("PL_API_TOKEN")
+        api_token=os.getenv("PL_API_TOKEN", "")
     )
     
     result = sync.sync_course(
         course_id="67890",
-        spreadsheet_id="your-spreadsheet-id",
         save_to_db=True
     )
     
@@ -92,49 +90,12 @@ def example_prairielearn():
     print()
 
 
-def example_sheets_basic():
-    """示例：基础 Google Sheets 操作"""
-    from api.services import SheetsClient
-    import pandas as pd
-    
-    print("=" * 60)
-    print("Google Sheets 基础操作示例")
-    print("=" * 60)
-    
-    client = SheetsClient()
-    
-    # 创建示例数据
-    df = pd.DataFrame({
-        'Name': ['Alice', 'Bob', 'Charlie'],
-        'Score': [95, 87, 92],
-        'Grade': ['A', 'B', 'A']
-    })
-    
-    # 写入 Sheets
-    spreadsheet_id = "your-spreadsheet-id"
-    client.dataframe_to_sheet(
-        df=df,
-        spreadsheet_id=spreadsheet_id,
-        worksheet_title="Sample Grades"
-    )
-    print("✓ 写入了 3 行数据到 'Sample Grades'")
-    
-    # 读取 Sheets
-    result_df = client.sheet_to_dataframe(
-        spreadsheet_id=spreadsheet_id,
-        worksheet_title="Sample Grades"
-    )
-    print(f"✓ 读取了 {len(result_df)} 行数据")
-    print()
-
-
 def example_clients_only():
     """示例：只使用客户端（不使用同步器）"""
     from api.services import (
         GradescopeClient,
         IClickerClient,
-        PrairieLearnClient,
-        SheetsClient
+        PrairieLearnClient
     )
     
     print("=" * 60)
@@ -158,10 +119,7 @@ def example_clients_only():
         api_token=os.getenv("PL_API_TOKEN", "")
     ) as pl:
         print("✓ PrairieLearn 客户端已创建")
-    
-    # Sheets 客户端
-    sheets = SheetsClient()
-    print("✓ Google Sheets 客户端已创建")
+
     print()
 
 
@@ -175,8 +133,7 @@ def example_import_patterns():
     from api.services import (
         GradescopeClient,
         IClickerClient,
-        PrairieLearnClient,
-        SheetsClient
+        PrairieLearnClient
     )
     print("✓ 方式 1: 从 api.services 统一导入")
     
@@ -184,7 +141,6 @@ def example_import_patterns():
     from api.services.gradescope import GradescopeClient, GradescopeSync
     from api.services.iclicker import IClickerClient, IClickerSync
     from api.services.prairielearn import PrairieLearnClient, PrairieLearnSync
-    from api.services.sheets import SheetsClient
     print("✓ 方式 2: 从各个子模块导入")
     
     # 方式 3: 导入数据模型
@@ -213,15 +169,9 @@ def show_architecture():
    - 调用多个客户端
    - 例：GradescopeSync, IClickerSync
 
-3. Shared Services (共享服务)
-   - 跨服务复用
-   - 统一接口
-   - 例：SheetsClient (被所有同步器使用)
-
 使用建议:
   - 简单任务: 直接使用 Client
   - 完整同步: 使用 Sync
-  - 批量操作: 使用 SheetsClient
     """)
 
 
@@ -244,7 +194,6 @@ def main():
     print("💡 提示:")
     print("  - 所有客户端支持 context manager (with 语句)")
     print("  - 同步器会自动处理登录/登出")
-    print("  - SheetsClient 内置重试和错误处理")
     print("  - Type hints 让 IDE 提供更好的代码补全")
     print()
     
@@ -259,7 +208,6 @@ def main():
     print("  - GRADESCOPE_EMAIL / GRADESCOPE_PASSWORD")
     print("  - ICLICKER_USERNAME / ICLICKER_PASSWORD")
     print("  - PL_API_TOKEN")
-    print("  - GOOGLE_APPLICATION_CREDENTIALS (可选)")
     print()
 
 

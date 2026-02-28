@@ -22,7 +22,7 @@ import { Box, useMediaQuery, Typography } from '@mui/material';
  *    b. Each number represents a student's mastery level for a particular concept.
  * 3. The concept nodes are arranged vertically from top to bottom.
  * 4. The list of numerical strings associated with each node is sorted horizontally from left to right.
- *    a. This numerical string is calculated through the Google Sheets data in the JavaScript API call.
+ *    a. This numerical string is calculated from database-backed API responses.
  * @component
  * @returns {JSX.Element} The ConceptMap component.
  */

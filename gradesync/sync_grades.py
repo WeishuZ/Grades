@@ -135,7 +135,6 @@ def main():
   PL_API_TOKEN=your-token
   ICLICKER_USERNAME=your-username
   ICLICKER_PASSWORD=your-password
-  SERVICE_ACCOUNT_CREDENTIALS='{"type": "service_account", ...}'
   DATABASE_URL=postgresql://gradesync:changeme@localhost:5432/gradesync
         """
     )

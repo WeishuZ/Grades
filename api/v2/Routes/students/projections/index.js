@@ -1,45 +1,49 @@
 import { Router } from 'express';
-import {
-    getTotalPossibleScore,
-    getMaxScores,
-    getStudentTotalScore,
-    getStudentScores,
-} from '../../../../lib/redisHelper.mjs';
 import { getMaxPointsSoFar } from '../../../../lib/studentHelper.mjs';
 import { isAdmin } from '../../../../lib/userlib.mjs';
+import {
+    getStudentSubmissionsGrouped,
+    getCourseAssignmentMatrix,
+    getCourseTotalPossibleScore,
+} from '../../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
     const { email } = req.params;
+    const { course_id: courseId } = req.query;
     try {
-        let studentTotalScore;
-        let userGrades;
-        let maxPoints = await getTotalPossibleScore();
-        let maxScores = await getMaxScores();
+        let studentTotalScore = 0;
+        let userGrades = {};
+
+        const maxScores = await getCourseAssignmentMatrix(courseId || null);
+        const maxPoints = await getCourseTotalPossibleScore(courseId || null);
+
         if (isAdmin(email)) {
             userGrades = maxScores;
-            studentTotalScore = getMaxPointsSoFar(maxScores, maxScores);
+            studentTotalScore = maxPoints;
         } else {
-                userGrades = await getStudentScores(email);
-                studentTotalScore = await getStudentTotalScore(email);
+            userGrades = await getStudentSubmissionsGrouped(email, courseId || null);
+            studentTotalScore = Object.values(userGrades).reduce((categorySum, categoryScores) => {
+                const assignmentSum = Object.values(categoryScores).reduce((sum, scoreObj) => {
+                    return sum + (Number(scoreObj?.student) || 0);
+                }, 0);
+                return categorySum + assignmentSum;
+            }, 0);
         }
+
         const maxPointsSoFar = getMaxPointsSoFar(userGrades, maxScores);
+        const safeMaxPointsSoFar = maxPointsSoFar > 0 ? maxPointsSoFar : 1;
+
         return res.status(200).json({
             zeros: Math.round(studentTotalScore),
-            pace: Math.round((studentTotalScore / maxPointsSoFar) * maxPoints),
-            perfect: Math.round(studentTotalScore + (maxPoints - maxPointsSoFar))
+            pace: Math.round((studentTotalScore / safeMaxPointsSoFar) * maxPoints),
+            perfect: Math.round(studentTotalScore + (maxPoints - maxPointsSoFar)),
+            dataSource: 'database'
         }); 
     } catch (err) {
-        switch (err.name) {
-            case 'StudentNotEnrolledError':
-            case 'KeyNotFoundError':
-                console.error("Error fetching student with id %s", email, err);
-                return res.status(404).json({ message: "Error fetching student."});
-            default:
-                console.error("Internal service error fetching student with id %s", email, err);
-                return res.status(500).json({ message: "Internal server error." });
-        }
+        console.error("Internal service error fetching student with id %s", email, err);
+        return res.status(500).json({ message: "Internal server error." });
     }
 });
 

@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 import os
 import re
 import json
-from pydantic import BaseModel
 import logging
 import traceback
 
@@ -296,11 +295,3 @@ def get_ids_for_all_assignments(data_dict: dict) -> list:
             all_assignment_ids.extend(ids_for_category)
     return all_assignment_ids
 
-class WriteRequest(BaseModel):
-    """
-    This is used in the `testWriteToSheet` API to ensure Google Authentication works.
-    """
-    spreadsheet_id: str
-    sheet_name: str
-    cell: str
-    value: str

@@ -22,7 +22,6 @@ if [ ! -f ".env" ]; then
     echo "   - PL_API_TOKEN"
     echo "   - ICLICKER_USERNAME"
     echo "   - ICLICKER_PASSWORD"
-    echo "   - SERVICE_ACCOUNT_CREDENTIALS"
     echo "   - DATABASE_URL"
     echo ""
 fi

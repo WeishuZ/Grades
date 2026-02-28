@@ -28,7 +28,6 @@ class Course(Base):
     __tablename__ = "courses"
     id = Column(Integer, primary_key=True)
     gradescope_course_id = Column(String, unique=True, index=True, nullable=False)
-    spreadsheet_id = Column(String)
     name = Column(String)
     department = Column(String)
     course_number = Column(String)
@@ -89,10 +88,6 @@ class CourseConfig(Base):
     # Database
     database_enabled = Column(Boolean, default=True)
     use_as_primary = Column(Boolean, default=True)
-    
-    # Spreadsheet
-    spreadsheet_id = Column(String(255))
-    spreadsheet_scopes = Column(ARRAY(Text), default=['https://www.googleapis.com/auth/spreadsheets'])
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -205,15 +200,6 @@ class Submission(Base):
     __table_args__ = (
         UniqueConstraint('assignment_id', 'student_id', name='uq_assignment_student'),
     )
-
-
-class SheetSync(Base):
-    __tablename__ = "sheet_syncs"
-    id = Column(Integer, primary_key=True)
-    course_id = Column(Integer, ForeignKey("courses.id"))
-    last_summary_sync_at = Column(DateTime(timezone=True))
-    summary_spreadsheet_id = Column(String)
-    notes = Column(JSON)
 
 
 class SummarySheet(Base):

@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
         if (!authHeader) {
             throw new AuthorizationError('Authorization Header is empty.');
         }
-        const authEmail = await getEmailFromAuth(authHeader);
+        const authEmail = await getEmailFromAuth(req);
         const adminStatus = await isAdmin(authEmail);
         
         // --- ADDING DEBUG LOG ---

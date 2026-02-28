@@ -562,6 +562,99 @@ export async function getCategoryAverages(courseId = null) {
 }
 
 /**
+ * Gets assignment max points grouped by category for a course.
+ * @param {string|null} courseId - Optional internal/gradescope course id filter
+ * @returns {Promise<Object>} Object shaped like { category: { assignmentTitle: maxPoints } }
+ */
+export async function getCourseAssignmentMatrix(courseId = null) {
+    const pool = getPool();
+
+    let query = `
+        SELECT
+            COALESCE(a.category, 'Uncategorized') AS category,
+            a.title AS assignment_name,
+            a.max_points,
+            c.id AS course_id,
+            c.gradescope_course_id
+        FROM assignments a
+        JOIN courses c ON a.course_id = c.id
+    `;
+
+    const params = [];
+    if (courseId) {
+        query += ` WHERE (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
+        params.push(String(courseId));
+    }
+
+    query += ` ORDER BY category, assignment_name`;
+
+    const result = await pool.query(query, params);
+    const matrix = {};
+
+    result.rows.forEach((row) => {
+        const category = row.category || 'Uncategorized';
+        if (!matrix[category]) {
+            matrix[category] = {};
+        }
+        matrix[category][row.assignment_name] = Number(row.max_points) || 0;
+    });
+
+    return matrix;
+}
+
+/**
+ * Gets total possible score (sum of assignment max points) for a course.
+ * @param {string|null} courseId - Optional internal/gradescope course id filter
+ * @returns {Promise<number>}
+ */
+export async function getCourseTotalPossibleScore(courseId = null) {
+    const pool = getPool();
+
+    let query = `
+        SELECT COALESCE(SUM(a.max_points), 0) AS total_points
+        FROM assignments a
+        JOIN courses c ON a.course_id = c.id
+    `;
+
+    const params = [];
+    if (courseId) {
+        query += ` WHERE (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
+        params.push(String(courseId));
+    }
+
+    const result = await pool.query(query, params);
+    return Number(result.rows?.[0]?.total_points) || 0;
+}
+
+/**
+ * Gets all students (name/email) from database, optionally filtered by course.
+ * @param {string|null} courseId - Optional internal/gradescope course id filter
+ * @returns {Promise<Array<Array<string>>>} List of [legalName, email]
+ */
+export async function getAllStudentsFromDb(courseId = null) {
+    const pool = getPool();
+
+    let query = `
+        SELECT DISTINCT
+            COALESCE(st.legal_name, st.email) AS student_name,
+            st.email AS student_email
+        FROM students st
+        JOIN courses c ON st.course_id = c.id
+    `;
+
+    const params = [];
+    if (courseId) {
+        query += ` WHERE (c.gradescope_course_id::text = $1 OR c.id::text = $1)`;
+        params.push(String(courseId));
+    }
+
+    query += ` ORDER BY student_name ASC`;
+
+    const result = await pool.query(query, params);
+    return result.rows.map((row) => [row.student_name, row.student_email]);
+}
+
+/**
  * Closes the database connection pool
  */
 export async function closePool() {

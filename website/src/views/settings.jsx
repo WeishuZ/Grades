@@ -105,32 +105,6 @@ export default function Settings() {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    const handleSpreadsheetChange = (field, value) => {
-        setConfig({
-            ...config,
-            spreadsheet: {
-                ...config.spreadsheet,
-                [field]: value,
-            },
-        });
-    };
-
-    const handlePageChange = (page, field, value) => {
-        setConfig({
-            ...config,
-            spreadsheet: {
-                ...config.spreadsheet,
-                pages: {
-                    ...config.spreadsheet.pages,
-                    [page]: {
-                        ...config.spreadsheet.pages[page],
-                        [field]: value,
-                    },
-                },
-            },
-        });
-    };
-
     const addAdmin = () => {
         if (newAdmin && newAdmin.includes('@')) {
             if (!config.admins.includes(newAdmin)) {
@@ -189,7 +163,6 @@ export default function Settings() {
             gradescope: { enabled: false, course_id: '', sync_interval_hours: 24 },
             prairielearn: { enabled: false, course_id: '' },
             iclicker: { enabled: false, course_names: [] },
-            spreadsheet: { id: '', scopes: ['https://www.googleapis.com/auth/spreadsheets'] },
             database: { enabled: true, use_as_primary: true },
             assignment_categories: []
         };
@@ -273,89 +246,6 @@ export default function Settings() {
 
             {/* GradeView Configuration Tab */}
             <Box role="tabpanel" hidden={tabValue !== 0}>
-
-            {/* Google Spreadsheet Configuration */}
-            <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <SettingsIcon sx={{ mr: 1 }} />
-                    <Typography variant="h6">Google Spreadsheet Configuration</Typography>
-                </Box>
-                <Divider sx={{ mb: 2 }} />
-
-                <TextField
-                    fullWidth
-                    label="Spreadsheet ID"
-                    value={config.spreadsheet?.id || ''}
-                    onChange={(e) => handleSpreadsheetChange('id', e.target.value)}
-                    helperText="The unique identifier of your Google Spreadsheet"
-                    sx={{ mb: 2 }}
-                />
-
-                <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-                    Grade Page Settings
-                </Typography>
-                <Box sx={{ pl: 2 }}>
-                    <TextField
-                        fullWidth
-                        label="Page Name"
-                        value={config.spreadsheet?.pages?.gradepage?.pagename || ''}
-                        onChange={(e) => handlePageChange('gradepage', 'pagename', e.target.value)}
-                        helperText="Name of the worksheet containing grade data"
-                        sx={{ mb: 2 }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                        <TextField
-                            label="Assignment Meta Row"
-                            type="number"
-                            value={config.spreadsheet?.pages?.gradepage?.assignmentMetaRow || 0}
-                            onChange={(e) => handlePageChange('gradepage', 'assignmentMetaRow', parseInt(e.target.value))}
-                            helperText="Row containing assignment metadata"
-                        />
-                        <TextField
-                            label="Start Row"
-                            type="number"
-                            value={config.spreadsheet?.pages?.gradepage?.startrow || 0}
-                            onChange={(e) => handlePageChange('gradepage', 'startrow', parseInt(e.target.value))}
-                            helperText="First row of student data"
-                        />
-                        <TextField
-                            label="Start Column"
-                            value={config.spreadsheet?.pages?.gradepage?.startcol || ''}
-                            onChange={(e) => handlePageChange('gradepage', 'startcol', e.target.value)}
-                            helperText="First column (e.g., 'C')"
-                            inputProps={{ maxLength: 2 }}
-                        />
-                    </Box>
-                </Box>
-
-                <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-                    Bin Page Settings
-                </Typography>
-                <Box sx={{ pl: 2 }}>
-                    <TextField
-                        fullWidth
-                        label="Page Name"
-                        value={config.spreadsheet?.pages?.binpage?.pagename || ''}
-                        onChange={(e) => handlePageChange('binpage', 'pagename', e.target.value)}
-                        helperText="Name of the worksheet containing bin/threshold data"
-                        sx={{ mb: 2 }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                        <TextField
-                            label="Start Cell"
-                            value={config.spreadsheet?.pages?.binpage?.startcell || ''}
-                            onChange={(e) => handlePageChange('binpage', 'startcell', e.target.value)}
-                            helperText="Starting cell (e.g., 'A51')"
-                        />
-                        <TextField
-                            label="End Cell"
-                            value={config.spreadsheet?.pages?.binpage?.endcell || ''}
-                            onChange={(e) => handlePageChange('binpage', 'endcell', e.target.value)}
-                            helperText="Ending cell (e.g., 'B61')"
-                        />
-                    </Box>
-                </Box>
-            </Paper>
 
             {/* Admin Users */}
             <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
@@ -730,18 +620,6 @@ export default function Settings() {
                                                     }
                                                     label="Use as Primary"
                                                     sx={{ ml: 2 }}
-                                                />
-                                            </Box>
-
-                                            {/* Spreadsheet */}
-                                            <Box sx={{ pl: 2, border: '1px solid #e0e0e0', borderRadius: 1, p: 2 }}>
-                                                <Typography variant="caption">Spreadsheet Configuration</Typography>
-                                                <TextField
-                                                    label="Spreadsheet ID"
-                                                    value={course.spreadsheet?.id || ''}
-                                                    onChange={(e) => updateCourseSection(courseIndex, 'spreadsheet', 'id', e.target.value)}
-                                                    fullWidth
-                                                    sx={{ mt: 1 }}
                                                 />
                                             </Box>
 

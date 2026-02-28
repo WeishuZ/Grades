@@ -68,8 +68,8 @@ async function migrateGradeSyncConfig() {
             const courseResult = await client.query(`
                 INSERT INTO courses (
                     gradescope_course_id, name, department, course_number,
-                    semester, year, instructor, spreadsheet_id, is_active
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+                    semester, year, instructor, is_active
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, true)
                 ON CONFLICT (gradescope_course_id) DO UPDATE SET
                     name = EXCLUDED.name,
                     department = EXCLUDED.department,
@@ -77,7 +77,6 @@ async function migrateGradeSyncConfig() {
                     semester = EXCLUDED.semester,
                     year = EXCLUDED.year,
                     instructor = EXCLUDED.instructor,
-                    spreadsheet_id = EXCLUDED.spreadsheet_id,
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING id
             `, [
@@ -87,8 +86,7 @@ async function migrateGradeSyncConfig() {
                 courseData.course_number,
                 courseData.semester,
                 courseData.year,
-                courseData.instructor,
-                courseData.spreadsheet?.id
+                courseData.instructor
             ]);
             
             const courseId = courseResult.rows[0].id;
@@ -101,9 +99,8 @@ async function migrateGradeSyncConfig() {
                     gradescope_enabled, gradescope_course_id, gradescope_sync_interval_hours,
                     prairielearn_enabled, prairielearn_course_id,
                     iclicker_enabled, iclicker_course_names,
-                    database_enabled, use_as_primary,
-                    spreadsheet_id, spreadsheet_scopes
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    database_enabled, use_as_primary
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (course_id) DO UPDATE SET
                     gradescope_enabled = EXCLUDED.gradescope_enabled,
                     gradescope_course_id = EXCLUDED.gradescope_course_id,
@@ -114,8 +111,6 @@ async function migrateGradeSyncConfig() {
                     iclicker_course_names = EXCLUDED.iclicker_course_names,
                     database_enabled = EXCLUDED.database_enabled,
                     use_as_primary = EXCLUDED.use_as_primary,
-                    spreadsheet_id = EXCLUDED.spreadsheet_id,
-                    spreadsheet_scopes = EXCLUDED.spreadsheet_scopes,
                     updated_at = CURRENT_TIMESTAMP
             `, [
                 courseId,
@@ -127,9 +122,7 @@ async function migrateGradeSyncConfig() {
                 courseData.iclicker?.enabled || false,
                 courseData.iclicker?.course_names || [],
                 courseData.database?.enabled ?? true,
-                courseData.database?.use_as_primary ?? true,
-                courseData.spreadsheet?.id,
-                courseData.spreadsheet?.scopes || ['https://www.googleapis.com/auth/spreadsheets']
+                courseData.database?.use_as_primary ?? true
             ]);
             
             // Insert assignment categories
@@ -181,15 +174,7 @@ async function migrateGradeViewConfig() {
             ['redis_host', config.redis?.host, 'string'],
             ['redis_port', config.redis?.port, 'integer'],
             ['redis_username', config.redis?.username, 'string'],
-            ['spreadsheet_id', config.spreadsheet?.id, 'string'],
-            ['google_oauth_client_id', config.googleconfig?.oauth?.clientid, 'string'],
-            ['grade_page_name', config.spreadsheet?.pages?.gradepage?.pagename, 'string'],
-            ['grade_page_meta_row', config.spreadsheet?.pages?.gradepage?.assignmentMetaRow, 'integer'],
-            ['grade_page_start_row', config.spreadsheet?.pages?.gradepage?.startrow, 'integer'],
-            ['grade_page_start_col', config.spreadsheet?.pages?.gradepage?.startcol, 'string'],
-            ['bin_page_name', config.spreadsheet?.pages?.binpage?.pagename, 'string'],
-            ['bin_page_start_cell', config.spreadsheet?.pages?.binpage?.startcell, 'string'],
-            ['bin_page_end_cell', config.spreadsheet?.pages?.binpage?.endcell, 'string']
+            ['google_oauth_client_id', config.googleconfig?.oauth?.clientid, 'string']
         ];
         
         for (const [key, value, valueType] of configs) {

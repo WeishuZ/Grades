@@ -1,3 +1,1 @@
-*/5 * * * * cd /dbcron && /usr/local/bin/python3 /dbcron/update_db.py >> /var/log/cron.log 2>&1
-*/30 * * * * cd /dbcron && /usr/local/bin/python3 /dbcron/update_bins.py >> /var/log/cron.log 2>&1
-6 * * * * cd /dbcron && /usr/local/bin/python3 /dbcron/flush_db.py >> /var/log/cron.log 2>&1
+*/30 * * * * echo "[$(date -Iseconds)] dbcron heartbeat: Sheets->Redis jobs disabled" >> /var/log/cron.log 2>&1

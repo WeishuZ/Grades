@@ -9,8 +9,7 @@ import CategoryStatsRouter from './category-stats/index.js';
 import { validateAdminOrStudentMiddleware } from '../../../lib/authlib.mjs';
 import { validateAdminMiddleware } from '../../../lib/authlib.mjs';
 import { getEmailFromAuth } from '../../../lib/googleAuthHelper.mjs';
-import { getStudents } from '../../../lib/redisHelper.mjs';
-import { getStudentsByCourse, getStudentCourses } from '../../../lib/dbHelper.mjs';
+import { getStudentsByCourse, getStudentCourses, getAllStudentsFromDb } from '../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
@@ -25,7 +24,7 @@ router.use(
 // Current user's enrolled courses (students) or all courses (admins).
 router.get('/courses', validateAdminOrStudentMiddleware, async (req, res) => {
     try {
-        const authEmail = await getEmailFromAuth(req.headers['authorization']);
+        const authEmail = await getEmailFromAuth(req);
         const courses = await getStudentCourses(authEmail);
         return res.status(200).json({ courses });
     } catch (err) {
@@ -54,18 +53,11 @@ router.get('/', validateAdminMiddleware, async (req, res) => {
             return res.status(200).json({ students });
         }
 
-        const students = await getStudents();
+        const students = await getAllStudentsFromDb();
         return res.status(200).json({ students });
     } catch (err) {
-        switch (err.name) {
-            case 'StudentNotEnrolledError':
-            case 'KeyNotFoundError':
-                console.error(`Error fetching all students. `, err);
-                return res.status(404).json({ message: "Error fetching student."});
-            default:
-                console.error(`Internal service error fetching all students. `, err);
-                return res.status(500).json({ message: "Internal server error." });
-        }
+        console.error(`Internal service error fetching all students. `, err);
+        return res.status(500).json({ message: "Internal server error." });
     }
 });
 

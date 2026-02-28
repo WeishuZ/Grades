@@ -198,7 +198,6 @@ def write_assignment_scores_optimized(
                 semester = None
                 year = None
                 instructor = None
-                spreadsheet_id = None
 
                 if course_config:
                     course_name = course_config.get('name')
@@ -207,9 +206,6 @@ def write_assignment_scores_optimized(
                     semester = course_config.get('semester')
                     year = course_config.get('year')
                     instructor = course_config.get('instructor')
-                    spreadsheet = course_config.get('spreadsheet', {})
-                    if isinstance(spreadsheet, dict):
-                        spreadsheet_id = spreadsheet.get('id')
 
                 course = Course(
                     gradescope_course_id=course_gradescope_id,
@@ -219,7 +215,6 @@ def write_assignment_scores_optimized(
                     semester=semester,
                     year=year,
                     instructor=instructor,
-                    spreadsheet_id=spreadsheet_id,
                 )
                 session.add(course)
                 session.flush()
@@ -233,8 +228,6 @@ def write_assignment_scores_optimized(
                     semester = course_config.get('semester')
                     year = course_config.get('year')
                     instructor = course_config.get('instructor')
-                    spreadsheet = course_config.get('spreadsheet', {})
-                    spreadsheet_id = spreadsheet.get('id') if isinstance(spreadsheet, dict) else None
 
                     if course_name and course.name != course_name:
                         course.name = course_name
@@ -253,9 +246,6 @@ def write_assignment_scores_optimized(
                         updated = True
                     if instructor and course.instructor != instructor:
                         course.instructor = instructor
-                        updated = True
-                    if spreadsheet_id and course.spreadsheet_id != spreadsheet_id:
-                        course.spreadsheet_id = spreadsheet_id
                         updated = True
 
                     if updated:

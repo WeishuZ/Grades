@@ -190,7 +190,6 @@ class GradeSyncService:
             # Sync grades with course config
             result = sync.sync_course(
                 course_id=self.config.gradescope_course_id,
-                spreadsheet_id=self.config.spreadsheet_id,
                 save_to_db=self.config.database_enabled,
                 course_name=self.config.name,
                 course_config=self.config.to_dict(),
@@ -231,7 +230,6 @@ class GradeSyncService:
             # Sync grades
             result = sync.sync_course(
                 course_id=self.config.prairielearn_course_id,
-                spreadsheet_id=self.config.spreadsheet_id,
                 save_to_db=self.config.database_enabled
             )
             
@@ -270,7 +268,6 @@ class GradeSyncService:
             # Sync grades for all course sections
             result = sync.sync_courses(
                 course_names=self.config.iclicker_course_names,
-                spreadsheet_id=self.config.spreadsheet_id,
                 save_to_db=self.config.database_enabled
             )
             
@@ -307,8 +304,7 @@ class GradeSyncService:
                     logger.info(f"Course {self.config.gradescope_course_id} not found, creating...")
                     course = Course(
                         name=self.config.name,
-                        gradescope_course_id=self.config.gradescope_course_id,
-                        spreadsheet_id=self.config.spreadsheet_id
+                        gradescope_course_id=self.config.gradescope_course_id
                     )
                     session.add(course)
                     session.commit()

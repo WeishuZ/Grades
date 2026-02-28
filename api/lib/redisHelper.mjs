@@ -16,9 +16,13 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
  * @returns {RedisClient} Redis client.
  */
 export function getClient(databaseIndex = 0) {
+    const redisHost = process.env.REDIS_HOST || config.get('redis.host');
+    const redisPort = process.env.REDIS_PORT || config.get('redis.port');
+    const redisPassword = process.env.REDIS_DB_SECRET || '';
+    const redisAuth = redisPassword ? `:${redisPassword}@` : '';
+
     const client = createClient({
-        url: `redis://:${process.env.REDIS_DB_SECRET}` +
-            `@${config.get('redis.host')}:${config.get('redis.port')}/${databaseIndex}`,
+        url: `redis://${redisAuth}${redisHost}:${redisPort}/${databaseIndex}`,
     });
     client.on('error', (err) => {
         console.error('Redis error: ', err);
@@ -107,7 +111,12 @@ export async function getStudentScores(email) {
         const studentInfo = await getStudent(email);
         return studentInfo['Assignments'];
     } catch (err) {
-        if (err.name === 'KeyNotFoundError' || err.name === 'StudentNotEnrolledError') {
+        if (
+            err.name === 'KeyNotFoundError' ||
+            err.name === 'StudentNotEnrolledError' ||
+            err.code === 'ENOTFOUND' ||
+            err.code === 'ECONNREFUSED'
+        ) {
             return {}; // Return empty object instead of throwing error
         }
         throw err; // Re-throw other errors
@@ -146,7 +155,11 @@ export async function getMaxScores() {
     try {
         return await getStudentScores('MAX POINTS');
     } catch (err) {
-        if (err.name === 'KeyNotFoundError') {
+        if (
+            err.name === 'KeyNotFoundError' ||
+            err.code === 'ENOTFOUND' ||
+            err.code === 'ECONNREFUSED'
+        ) {
             return {}; // Return empty object instead of throwing error
         }
         throw err; // Re-throw other errors
@@ -160,18 +173,29 @@ export async function getMaxScores() {
  */
 export async function getStudents() {
     const client = await getClient();
-    await client.connect();
+    try {
+        await client.connect();
 
-    var keys = await client.keys('*@*');
-    const students = [];
+        var keys = await client.keys('*@*');
+        const students = [];
 
-    for (const key of keys) {
-        const studentData = await getEntry(key)
-        students.push([studentData['Legal Name'], key]); 
+        for (const key of keys) {
+            const studentData = await getEntry(key)
+            students.push([studentData['Legal Name'], key]); 
+        }
+
+        await client.quit();
+        return students;
+    } catch (err) {
+        if (err?.code === 'ENOTFOUND' || err?.code === 'ECONNREFUSED') {
+            try {
+                await client.quit();
+            } catch {
+            }
+            return [];
+        }
+        throw err;
     }
-
-    await client.quit();
-    return students;
 }
 
 

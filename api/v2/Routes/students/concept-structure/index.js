@@ -1,8 +1,11 @@
 import { Router } from 'express';
-import { getMaxScores, getStudentScores, getStudents } from '../../../../lib/redisHelper.mjs';
+import {
+    getCourseAssignmentMatrix,
+    getStudentSubmissionsGrouped,
+    getAllStudentScores,
+    getStudentCourses,
+} from '../../../../lib/dbHelper.mjs';
 import ProgressReportData from '../../../../assets/progressReport/CS10.json' with { type: 'json' };
-import KeyNotFoundError from '../../../../lib/errors/redis/KeyNotFound.js';
-import StudentNotEnrolledError from '../../../../lib/errors/redis/StudentNotEnrolled.js';
 
 const router = Router({ mergeParams: true });
 
@@ -38,53 +41,26 @@ async function computeMasteryLevels(userTopicPoints, maxTopicPoints) {
     );
 }
 
-// Check if a concept has been taught (has actual student grades from ANY student)
-async function checkIfTaught(conceptName) {
-    try {
-        // Get all students
-        const students = await getStudents();
-        
-        // Check if any student has any grade for this concept
-        for (const [legalName, email] of students) {
-            try {
-                const studentScores = await getStudentScores(email);
-                
-                // Check if this student has any grade > 0 for this concept
-                const hasGrade = Object.values(studentScores).some(category => 
-                    Object.keys(category).includes(conceptName) && 
-                    category[conceptName] > 0
-                );
-                if (hasGrade) {
-                    return true;
-                }
-            } catch (err) {
-                // Skip this student if we can't get their scores
-                continue;
-            }
-        }
-        
-        return false;
-    } catch (err) {
-        console.error('Error checking if concept is taught:', err);
-        return false;
-    }
-}
-
-// Check if a parent node has been taught (if ANY of its children have been taught)
-function checkIfParentTaught(node) {
-    if (!node.children || node.children.length === 0) {
-        return node.data?.taught || false;
-    }
-    
-    // Check if any child has been taught
-    return node.children.some(child => checkIfParentTaught(child));
-}
-
 // Build dynamic outline shape from assignment data
-async function buildOutline(email) {
+async function buildOutline(email, courseId = null) {
     try {
-        const maxScores = await getMaxScores();
-        const studentScores = await getStudentScores(email);
+        const maxScores = await getCourseAssignmentMatrix(courseId);
+        const allScores = await getAllStudentScores(courseId);
+
+        const taughtAssignments = new Set();
+        const taughtCategories = new Set();
+
+        allScores.forEach((student) => {
+            const scoreTree = student?.scores || {};
+            Object.entries(scoreTree).forEach(([category, assignments]) => {
+                Object.entries(assignments || {}).forEach(([assignmentName, score]) => {
+                    if ((Number(score) || 0) > 0) {
+                        taughtAssignments.add(assignmentName);
+                        taughtCategories.add(category);
+                    }
+                });
+            });
+        });
         
         // Build tree structure from assignment categories
         const tree = {
@@ -104,7 +80,7 @@ async function buildOutline(email) {
             const categoryWeek = Math.min(Math.floor((categoryIndex / totalCategories) * 12) + 1, 12);
             
             // Check if this category has been taught
-            const categoryTaught = await checkIfTaught(category);
+            const categoryTaught = taughtCategories.has(category);
             
             const categoryNode = {
                 id: categoryIndex + 2,
@@ -124,7 +100,7 @@ async function buildOutline(email) {
                 const assignmentWeek = Math.min(categoryWeek + Math.floor(assignmentIndex / 2), semesterWeeks);
                 
                 // Check if this assignment has been taught
-                const assignmentTaught = await checkIfTaught(assignment);
+                const assignmentTaught = taughtAssignments.has(assignment);
                 
                 const assignmentNode = {
                     id: (categoryIndex + 2) * 100 + assignmentIndex + 1,
@@ -157,6 +133,13 @@ async function buildOutline(email) {
 
 // Recursively annotate node trees with mastery data and taught status
 function annotateTreeWithMastery(nodes, masteryMap) {
+    const hasTaughtDescendant = (node) => {
+        if (!node) return false;
+        if (node.data?.taught) return true;
+        if (!Array.isArray(node.children) || node.children.length === 0) return false;
+        return node.children.some((child) => hasTaughtDescendant(child));
+    };
+
     const annotated = {
         ...nodes,
         children: nodes.children.map((node) => {
@@ -180,7 +163,7 @@ function annotateTreeWithMastery(nodes, masteryMap) {
         if (node.children && node.children.length > 0) {
             // This is a parent node - check if any child has been taught
             const hasTaughtChild = node.children.some(child => 
-                child.data?.taught || checkIfParentTaught(child)
+                hasTaughtDescendant(child)
             );
             node.data = { ...node.data, taught: hasTaughtChild };
             
@@ -241,49 +224,42 @@ function annotateTreeWithMastery(nodes, masteryMap) {
 router.get('/', async (req, res, next) => {
     const { email } = req.params;
     try {
-        const outline = await buildOutline(email);
-        
-        // 2) compute mastery mapping
-        let studentScores = {};
-        let maxScores = {};
-        
-        try {
-            maxScores = await getMaxScores();
-            studentScores = await getStudentScores(email);
-        } catch (err) {
-            if (
-                err instanceof KeyNotFoundError ||
-                err instanceof StudentNotEnrolledError
-            ) {
-                // no scores yet – treat as all–zero
-                maxScores = {};
-                studentScores = {};
-            } else {
-                throw err; // real infrastructure problem
+        const { course_id: requestedCourseId } = req.query;
+
+        let effectiveCourseId = requestedCourseId || null;
+        if (!effectiveCourseId) {
+            const studentCourses = await getStudentCourses(email);
+            if (studentCourses.length > 0) {
+                effectiveCourseId = studentCourses[0].gradescope_course_id || studentCourses[0].id;
             }
         }
+        const outlineData = await buildOutline(email, effectiveCourseId);
+
+        // 2) compute mastery mapping
+        const maxScores = await getCourseAssignmentMatrix(effectiveCourseId);
+        const studentScores = await getStudentSubmissionsGrouped(email, effectiveCourseId);
         
         const userPoints = getTopicsFromUser(studentScores);
         const maxPoints = getTopicsFromUser(maxScores);
         const mastery = await computeMasteryLevels(userPoints, maxPoints);
         
         // 3) annotate outline with mastery and taught status
-        outline.nodes = annotateTreeWithMastery(outline.nodes, mastery);
+        outlineData.nodes = annotateTreeWithMastery(outlineData.nodes, mastery);
         
         // 4) add student levels and calculate current week dynamically
-        outline['student levels'] = ProgressReportData['student levels'];
-        outline['class levels'] = ProgressReportData['class levels'];
+        outlineData['student levels'] = ProgressReportData['student levels'];
+        outlineData['class levels'] = ProgressReportData['class levels'];
         
         // Calculate current week based on start date
-        const startDate = new Date(outline['start date']);
+        const startDate = new Date(outlineData['start date']);
         const currentDate = new Date();
         const timeDiff = currentDate.getTime() - startDate.getTime();
         const daysDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
         const currentWeek = Math.max(1, Math.floor(daysDiff / 7) + 1);
-        outline['currentWeek'] = currentWeek;
+        outlineData['currentWeek'] = currentWeek;
         
         // 5) respond
-        return res.status(200).json(outline);
+        return res.status(200).json(outlineData);
     } catch (err) {
         console.error('Error fetching concept-structure for', email, err);
         return next(err);

@@ -19,3 +19,5 @@ website/build/
 
 secrets/
 docs/*.md
+
+*.dev-local

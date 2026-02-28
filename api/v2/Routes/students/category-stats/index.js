@@ -13,7 +13,7 @@ const router = Router({ mergeParams: true });
 router.get('/', async (req, res) => {
     try {
         const { course_id: requestedCourseId } = req.query;
-        const authEmail = await getEmailFromAuth(req.headers['authorization']);
+        const authEmail = await getEmailFromAuth(req);
         const requesterIsAdmin = isAdmin(authEmail);
 
         let courseId = requestedCourseId || null;

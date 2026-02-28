@@ -70,23 +70,18 @@ website/
 
 ### 3. **gradesync/** - Grade Sync Service (FastAPI)
 
-Fetches grades from external systems (Gradescope, PrairieLearn, iClicker) and syncs to database and Google Sheets
+Fetches grades from external systems (Gradescope, PrairieLearn, iClicker) and syncs to PostgreSQL
 
 ```
 gradesync/
-├── config.json           # Course config (enabled systems, Spreadsheet ID)
+├── config.json           # Course config (enabled systems, buckets, categories)
 ├── api/
 │   ├── app.py           # Main FastAPI application
 │   ├── config_manager.py # Config loader
 │   ├── schemas.py        # Data models
 │   ├── services/         # Business logic layer
 │   └── sync/             # Sync logic
-├── gradescope/          # Gradescope crawler
-│   ├── gradescope_sync.py
-│   └── gradescope_to_spreadsheet.py
-├── prairieLearn/        # PrairieLearn sync
-├── iclicker/            # iClicker sync
-└── scripts/             # Helper scripts (backfill, etc.)
+└── docs/                # GradeSync docs
 ```
 
 **Workflow:**
@@ -97,24 +92,14 @@ GradeSync crawler/API fetches data
     ↓
 Normalize & categorize data (assignment_categories)
     ↓
-Update Google Sheets / PostgreSQL
+Update PostgreSQL
 ```
 
 ---
 
-### 4. **dbcron/** - Database Scheduled Tasks
+### 4. **dbcron/** - Cache Maintenance Scripts
 
-Python scripts that periodically update Redis cache and refresh database data
-
-```
-dbcron/
-├── update_db.py         # Update Redis / DB from Sheets
-├── update_bins.py       # Update grade bins (score brackets)
-├── flush_db.py          # Clear Redis cache
-└── manual_update_flush.py # Manual update script
-```
-
-**Trigger mechanism:** Cron jobs or scheduled tasks in container
+Utility scripts for manual Redis maintenance.
 
 ---
 
@@ -177,7 +162,6 @@ graph LR
     
     ES["🔗 External<br/>Systems<br/>Gradescope<br/>PrairieLearn<br/>iClicker"]
     
-    GSheets["📊 Google<br/>Sheets"]
     
     User -->|HTTP/S| RP
     RP --> Web
@@ -190,12 +174,10 @@ graph LR
     
     ES -->|sync| GS
     GS -->|write| DB
-    GS -->|write| GSheets
     
     DB -->|via proxy| CSP
     
     DC -->|update Redis| Redis
-    DC -->|sync Sheets| GSheets
     
     PR -->|read| DB
     PR -->|generate| User
@@ -211,7 +193,6 @@ graph LR
     style DC fill:#ede7f6
     style CSP fill:#f5f5f5
     style ES fill:#ffebee
-    style GSheets fill:#c8e6c9
 ```
 
 ---
@@ -249,7 +230,7 @@ GradeSync 定时任务 / 手动触发
     ↓
 按 assignment_categories 分类聚合
     ↓
-写入 PostgreSQL / Google Sheets
+写入 PostgreSQL
     ↓
 dbcron 定时更新 Redis 缓存
 ```
@@ -275,16 +256,15 @@ API 查询 Redis → 找到学生缓存数据
 ## Environment & Configuration
 
 ### Environment Variables (`.env`)
-- **API**: PORT, DATABASE_URL, SERVICE_ACCOUNT_CREDENTIALS
+- **API**: PORT, DATABASE_URL
 - **Database**: POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD
-- **GradeSync**: GRADESYNC_SERVICE_ACCOUNT_CREDENTIALS, Gradescope credentials
+- **GradeSync**: Gradescope/PrairieLearn/iClicker credentials
 
 ### Config Files
 - **API** (`api/config/default.json`)
   - Redis connection
   - OAuth client ID
   - Admin list
-  - Spreadsheet ID
 
 - **GradeSync** (`gradesync/config.json`)
   - Course list

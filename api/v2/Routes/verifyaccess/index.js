@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getEmailFromAuth } from '../../../lib/googleAuthHelper.mjs';
-import { getStudent } from '../../../lib/redisHelper.mjs';
+import { studentExistsInDb } from '../../../lib/dbHelper.mjs';
 
 const router = Router();
 
@@ -13,10 +13,10 @@ router.get('/verifyaccess', async (req, res) => {
     if (!authorization) {
         return res.status(200).send(false);
     }
-    const auth = authorization.split(' ');
     try {
-        await getStudent(await getEmailFromAuth(auth));
-        return res.status(200).send(true);
+        const email = await getEmailFromAuth(req);
+        const exists = await studentExistsInDb(email);
+        return res.status(200).send(Boolean(exists));
     } catch (e) {
         return res.status(200).send(false);
     }

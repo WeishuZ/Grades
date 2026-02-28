@@ -49,10 +49,6 @@ CREATE TABLE IF NOT EXISTS course_configs (
     database_enabled BOOLEAN DEFAULT true,
     use_as_primary BOOLEAN DEFAULT true,
     
-    -- Spreadsheet settings
-    spreadsheet_id VARCHAR(255),
-    spreadsheet_scopes TEXT[] DEFAULT ARRAY['https://www.googleapis.com/auth/spreadsheets'],
-    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -126,8 +122,7 @@ INSERT INTO system_config (key, value, value_type, description, is_public) VALUE
     ('csv_output_dir', 'data/exports', 'string', 'Directory for exported CSV files', false),
     ('log_level', 'INFO', 'string', 'Logging verbosity (DEBUG, INFO, WARNING, ERROR)', false),
     ('retry_attempts', '3', 'integer', 'Maximum retry attempts for failed operations', false),
-    ('retry_delay_seconds', '5', 'integer', 'Delay between retry attempts in seconds', false),
-    ('default_scopes', '["https://www.googleapis.com/auth/spreadsheets"]', 'json', 'Default Google API scopes', false)
+    ('retry_delay_seconds', '5', 'integer', 'Delay between retry attempts in seconds', false)
 ON CONFLICT (key) DO NOTHING;
 
 -- Insert default GradeView configurations
@@ -135,15 +130,7 @@ INSERT INTO gradeview_config (key, value, value_type, description) VALUES
     ('redis_host', 'redis', 'string', 'Redis server hostname'),
     ('redis_port', '6379', 'integer', 'Redis server port'),
     ('redis_username', 'default', 'string', 'Redis username'),
-    ('spreadsheet_id', '1_gsKSmSxD-tyTSsrK5iRZW4X7eGuJMHlhrEE5krjW94', 'string', 'Default spreadsheet ID'),
-    ('google_oauth_client_id', '960156693240-hje09pstet1al4g4tr08271kkcjfqnn2.apps.googleusercontent.com', 'string', 'Google OAuth Client ID'),
-    ('grade_page_name', 'HAID', 'string', 'Grade page worksheet name'),
-    ('grade_page_meta_row', '2', 'integer', 'Assignment metadata row number'),
-    ('grade_page_start_row', '4', 'integer', 'First row of student data'),
-    ('grade_page_start_col', 'C', 'string', 'First column of student data'),
-    ('bin_page_name', 'Constants', 'string', 'Bin page worksheet name'),
-    ('bin_page_start_cell', 'A51', 'string', 'Bin page start cell'),
-    ('bin_page_end_cell', 'B61', 'string', 'Bin page end cell')
+    ('google_oauth_client_id', '960156693240-hje09pstet1al4g4tr08271kkcjfqnn2.apps.googleusercontent.com', 'string', 'Google OAuth Client ID')
 ON CONFLICT (key) DO NOTHING;
 
 -- Comments for documentation

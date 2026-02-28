@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getEntry, getStudents, getStudentScores } from '../../../../lib/redisHelper.mjs';
+import { getCourseAssignmentMatrix } from '../../../../lib/dbHelper.mjs';
 
 const router = Router({ mergeParams: true });
 
@@ -10,35 +10,17 @@ const router = Router({ mergeParams: true });
  */
 router.get('/', async (req, res) => {
     try {
-        // Try to get categories from Redis first
-        try {
-            const categoriesEntry = await getEntry('Categories');
-            return res.status(200).json(categoriesEntry);
-        } catch (err) {
-            // If not found in Redis, proceed to build from student scores
-            console.log('Categories not found in Redis, building from student scores.');
-        }
-        
-        // Build categories from student scores
-        const students = await getStudents();
-        const categories = {};
-        
-        for (const student of students) {
-            const studentId = student[1];
-            const scores = await getStudentScores(studentId);
-            
-            // For each section in scores
-            for (const [section, assignments] of Object.entries(scores)) {
-                if (!categories[section]) {
-                    categories[section] = {};
-                }
-                // For each assignment in section
-                for (const assignmentName of Object.keys(assignments)) {
-                    categories[section][assignmentName] = true;
-                }
-            }
-        }
-        
+        const { course_id: courseId } = req.query;
+        const assignmentMatrix = await getCourseAssignmentMatrix(courseId || null);
+
+        const categories = Object.entries(assignmentMatrix).reduce((acc, [section, assignments]) => {
+            acc[section] = Object.keys(assignments).reduce((sectionAssignments, assignmentName) => {
+                sectionAssignments[assignmentName] = true;
+                return sectionAssignments;
+            }, {});
+            return acc;
+        }, {});
+
         res.status(200).json(categories);
     }
     catch (error) {
